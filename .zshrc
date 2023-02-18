@@ -2,8 +2,8 @@
 ################################################################################
 export TERM="xterm-256color" # getting proper colors
 export HISTORY_IGNORE="(ls|cd|pwd|exit|sudo reboot|history|cd -|cd ..)"
-export EDITOR="neovim"             # $EDITOR use Neovim
-export VISUAL="visual-studio-code" # $VISUAL use Visual Studio Code
+export EDITOR="neovim"  # $EDITOR use Neovim
+export VISUAL="code -w" # $VISUAL use Visual Studio Code
 
 # PATH
 ################################################################################
