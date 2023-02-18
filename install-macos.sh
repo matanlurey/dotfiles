@@ -1,0 +1,45 @@
+# Additional install steps needed for OSX.
+
+# Change hostname.
+sudo scutil --set HostName "mac"
+
+# Check if "dockutil" is installed.
+if [[ ! -f "/usr/local/bin/dockutil" ]]; then
+  DOCKUTIL_VERSION="3.0.2"
+  DOCKUTIL_REPOSITORY="https://github.com/kcrawford/dockutil"
+  DOCKUTIL_PKG="${DOCKUTIL_REPOSITORY}/releases/download/${DOCKUTIL_VERSION}/dockutil-${DOCKUTIL_VERSION}.pkg"
+
+  wget -O "/tmp/dockutil.pkg" "${DOCKUTIL_PKG}"
+  sudo installer -pkg "/tmp/dockutil.pkg" -target "/Applications"
+else
+  echo "dockutil is already installed, skipping." >&2
+fi
+
+# Clear all dock items.
+dockutil --remove all --no-restart
+
+# Add dock items.
+dockutil --add "/Applications/Google Chrome.app" --no-restart
+dockutil --add "/Applications/Discord.app" --no-restart
+dockutil --add "/Applications/Visual Studio Code.app" --no-restart
+dockutil --add "/Applications/Alacritty.app" --no-restart
+
+# Restart dock.
+killall Dock
+
+# Check if "rust" is installed.
+rustup-init -q -y
+
+# Copy .config files.
+cp -r .config ~/
+
+# Copy tmux.conf.
+cp .tmux.conf ~/
+
+# Make the default shell zsh if it isn't already.
+if [[ ! "$SHELL" == "/bin/zsh" ]]; then
+  chsh -s /bin/zsh
+fi
+
+# Copy .zshrc.
+cp .zshrc ~/
