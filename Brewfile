@@ -25,6 +25,7 @@ cask 'discord' # https://discord.com/
 cask '1password' # https://1password.com/
 cask 'the-unarchiver' # https://theunarchiver.com/
 cask 'alacritty' # https://github.com/alacritty/alacritty
+cask 'rectangle' # https://rectangleapp.com/
 
 # Fonts
 tap 'homebrew/cask-fonts'
