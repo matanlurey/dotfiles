@@ -30,6 +30,28 @@ killall Dock
 # Check if "rust" is installed.
 rustup-init -q -y
 
+# Install "cargo" extensions:
+# - "cargo-edit" for managing dependencies.
+cargo install cargo-edit
+# - "cargo-update" for updating installed crates.
+cargo install cargo-update
+# - "cargo-watch" for watching files and running commands.
+cargo install cargo-watch
+# - "cargo-tree" for displaying a dependency tree.
+cargo install cargo-tree
+# - "cargo-outdated" for checking for outdated dependencies.
+cargo install cargo-outdated
+# - "cargo-expand" for expanding macros.
+cargo install cargo-expand
+# - "cargo-bloat" for analyzing binary size.
+cargo install cargo-bloat
+# - "cargo-generate" for generating projects from templates.
+cargo install cargo-generate
+# - "cargo-release" for releasing crates.
+cargo install cargo-release
+# - "cargo-make" for running tasks.
+cargo install cargo-make
+
 # Copy .config files.
 cp -r .config ~/
 
