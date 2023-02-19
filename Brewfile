@@ -43,6 +43,7 @@ brew 'reattach-to-user-namespace' # https://tekkie.dev/macos/howto/macos-pastebo
 brew 'tldr' # Summarize man pages, i.e. "tldr curl"
 brew 'trash' # Works like rm, but restorable from the MacOS trash app
 brew 'wget' # https://www.gnu.org/software/wget/
-brew 'z' # Smarter "cd"; https://github.com/rupa/z
+brew 'zoxide' # Smarter "cd"; https://github.com/rupa/z
+brew 'fzf' # Fuzzy finder; https://github.com/junegunn/fzf#using-homebrew
 brew 'zsh' # https://www.zsh.org/
 brew 'zsh-completions' # https://github.com/zsh-users/zsh-completions
