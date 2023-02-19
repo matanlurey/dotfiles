@@ -34,7 +34,7 @@ alias find='fd'
 
 # Zoxide.
 eval "$(zoxide init zsh)"
-$(brew --prefix)/opt/fzf/install
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 # Use VI mode in ZSH.
 bindkey -v

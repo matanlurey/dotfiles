@@ -32,25 +32,25 @@ rustup-init -q -y
 
 # Install "cargo" extensions:
 # - "cargo-edit" for managing dependencies.
-cargo install cargo-edit
+cargo install cargo-edit -q
 # - "cargo-update" for updating installed crates.
-cargo install cargo-update
+cargo install cargo-update -q
 # - "cargo-watch" for watching files and running commands.
-cargo install cargo-watch
+cargo install cargo-watch -q
 # - "cargo-tree" for displaying a dependency tree.
-cargo install cargo-tree
+cargo install cargo-tree -q
 # - "cargo-outdated" for checking for outdated dependencies.
-cargo install cargo-outdated
+cargo install cargo-outdated -q
 # - "cargo-expand" for expanding macros.
-cargo install cargo-expand
+cargo install cargo-expand -q
 # - "cargo-bloat" for analyzing binary size.
-cargo install cargo-bloat
+cargo install cargo-bloat -q
 # - "cargo-generate" for generating projects from templates.
-cargo install cargo-generate
+cargo install cargo-generate -q
 # - "cargo-release" for releasing crates.
-cargo install cargo-release
+cargo install cargo-release -q
 # - "cargo-make" for running tasks.
-cargo install cargo-make
+cargo install cargo-make -q
 
 # Copy .config files.
 cp -r .config ~/
@@ -65,3 +65,4 @@ fi
 
 # Copy .zshrc.
 cp .zshrc ~/
+cp .fzf.zsh ~/
