@@ -32,6 +32,9 @@ alias grep='rg'
 # Changing "find" to "fd"
 alias find='fd'
 
+# Changing rm to trash
+alias rm='trash'
+
 # Zoxide.
 eval "$(zoxide init zsh)"
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
