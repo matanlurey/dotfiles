@@ -26,6 +26,15 @@ alias ll='exa -l --color=always --group-directories-first'  # long format
 alias lt='exa -aT --color=always --group-directories-first' # tree listing
 alias l.='exa -a | egrep "^\."'
 
+# Changing "cd" to "z"
+alias cd='z'
+
+# Changing "grep" to "rg"
+alias grep='rg'
+
+# Changing "find" to "fd"
+alias find='fd'
+
 # Use VI mode in ZSH.
 bindkey -v
 
