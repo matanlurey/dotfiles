@@ -9,6 +9,8 @@ export VISUAL="code -w" # $VISUAL use Visual Studio Code
 ################################################################################
 # Add Homebrew's bin to PATH.
 export PATH="/opt/homebrew/bin:$PATH"
+# Add Go's bin to PATH.
+export PATH="$PATH:$(go env GOPATH)/bin"
 
 # ALIASES
 ################################################################################

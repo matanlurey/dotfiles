@@ -10,6 +10,7 @@ brew 'bash-completion'
 # Languages
 brew 'java'
 brew 'rustup'
+brew 'gcovr' # Generates reports from gcov test coverage.
 brew 'ruby'
 brew 'python'
 brew 'pipenv' # Node-style local modules for Python
