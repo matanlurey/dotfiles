@@ -259,7 +259,7 @@ Managed packages:
 
 ```bash
 # Install chezmoi and apply dotfiles in one command
-sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply matan
+sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply matanlurey
 ```
 
 After applying, create `~/.zsh_secrets` for any API keys:
@@ -268,10 +268,28 @@ After applying, create `~/.zsh_secrets` for any API keys:
 echo 'export ANTHROPIC_API_KEY="your-key"' > ~/.zsh_secrets
 ```
 
-### Existing Machine
+### Existing Machine (Cloned Repository)
+
+If you have already cloned the repository and want to manage the files in the current directory:
 
 ```bash
-chezmoi init https://github.com/matan/dotfiles.git
+# Initialize chezmoi to use the current directory as source
+chezmoi init --source .
+
+# Apply changes from the current directory
+chezmoi apply
+```
+
+To test changes without permanently setting the source, use the `-S` flag:
+
+```bash
+chezmoi -S . diff
+```
+
+### Existing Machine (Remote)
+
+```bash
+chezmoi init https://github.com/matanlurey/dotfiles.git
 chezmoi diff   # Preview changes
 chezmoi apply  # Apply changes
 ```
