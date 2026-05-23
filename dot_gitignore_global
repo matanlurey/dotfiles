@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# AI agents
+.pi/
+.agents/
+.claude/
+.dunk/
+
+# JFrog
+.jfrog/
+
+# Build artifacts
+*.o
+*.so
+*.dylib

@@ -1,0 +1,15 @@
+# Starship prompt
+eval "$(starship init zsh)"
+
+# Zsh plugins (installed via Homebrew)
+source $HOMEBREW_PREFIX/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+source $HOMEBREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+
+# fzf (fuzzy finder)
+eval "$(fzf --zsh)"
+
+# Zoxide (smarter cd)
+eval "$(zoxide init zsh)"
+
+# Secrets (not tracked by chezmoi)
+[ -f "$HOME/.zsh_secrets" ] && source "$HOME/.zsh_secrets"

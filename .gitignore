@@ -1,0 +1,3 @@
+# Extra files added by machine-specific overlays
+private_dot_pi/agent/extensions/github-enterprise.ts
+private_dot_pi/agent/mcp.json.tmpl

@@ -1,0 +1,27 @@
+[user]
+	name = Matan Lurey
+	email = {{ .email }}
+[init]
+	defaultBranch = main
+{{ if hasKey . "gitUrlRewrites" -}}
+{{ range .gitUrlRewrites -}}
+[url "{{ .to }}"]
+	insteadOf = {{ .from }}
+{{ end -}}
+{{ end -}}
+[core]
+	excludesfile = ~/.gitignore_global
+	pager = delta
+[interactive]
+	diffFilter = delta --color-only
+[filter "lfs"]
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+	clean = git-lfs clean -- %f
+[push]
+	autoSetupRemote = true
+[alias]
+	nuke = !git clean -fdx -e .jj
+[include]
+	path = ~/.config/delta/themes.gitconfig

@@ -1,0 +1,14 @@
+# Delta config (sourced by git and used by jj via pager)
+[delta]
+    navigate = true
+    side-by-side = true
+    line-numbers = true
+    syntax-theme = tokyonight_night
+    dark = true
+    hyperlinks = true
+    file-style = bold yellow
+    hunk-header-style = line-number syntax bold
+    minus-style = syntax "#3a1d2e"
+    minus-emph-style = syntax "#6b2e43"
+    plus-style = syntax "#1a2e1a"
+    plus-emph-style = syntax "#2e5e2e"

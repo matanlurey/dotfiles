@@ -1,0 +1,17 @@
+// Ultra-wide layout: single tab, no tab bar
+//
+// Top row (left to right): terminal | terminal | herdr
+// Bottom: full-width terminal
+
+layout {
+    tab name="uw" focus=true {
+        pane split_direction="horizontal" {
+            pane split_direction="vertical" {
+                pane borderless=true focus=true
+                pane borderless=true
+                pane command="herdr-session" borderless=true
+            }
+            pane size="25%" borderless=true
+        }
+    }
+}

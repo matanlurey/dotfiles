@@ -1,0 +1,49 @@
+// Zellij Configuration
+// Default keybindings are used (Alt+h/j/k/l for pane nav, Ctrl+p pane mode, Ctrl+t tab mode, etc.)
+// See: zellij setup --dump-config for full defaults
+
+// Theme
+theme "tokyo-night"
+
+// Use compact bar (less chrome)
+default_layout "dev"
+
+// Start in locked mode so all keys pass through to terminal apps.
+// Ctrl+g to enter Zellij normal mode, Esc/Enter to go back.
+default_mode "locked"
+
+// Mouse support
+mouse_mode true
+
+// Copy to system clipboard on macOS
+copy_on_select true
+copy_command "pbcopy"
+
+// Scrollback
+scroll_buffer_size 50000
+
+// Session persistence (detach/reattach)
+session_serialization true
+
+// No pane frames (borderless feel)
+pane_frames false
+
+// Don't show release notes popup
+show_release_notes false
+
+// Free Ctrl+P for terminal apps (pi model cycling)
+// Use Alt+P for pane mode instead
+keybinds {
+    normal {
+        unbind "Ctrl p"
+        bind "Alt p" { SwitchToMode "Pane"; }
+    }
+    shared {
+        bind "~" { ToggleFloatingPanes; }
+    }
+}
+
+// On close, detach instead of quit (preserves session)
+on_force_close "detach"
+
+

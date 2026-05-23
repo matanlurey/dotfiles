@@ -1,0 +1,25 @@
+# Font
+font-family = FiraCode Nerd Font Mono
+font-size = 14
+font-thicken = true
+
+# Theme
+theme = TokyoNight
+
+# Window
+window-padding-x = 12
+window-padding-y = 12
+background-opacity = 0.92
+window-decoration = true
+
+# Quick terminal (Quake-style dropdown)
+keybind = global:ctrl+grave_accent=toggle_quick_terminal
+
+# Shell integration
+shell-integration = zsh
+shell-integration-features = cursor,sudo,title
+
+# Shaders
+custom-shader = ~/.config/ghostty/shaders/bloom.glsl
+custom-shader = ~/.config/ghostty/shaders/cursor_warp.glsl
+custom-shader-animation = true

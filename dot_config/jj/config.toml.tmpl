@@ -1,0 +1,13 @@
+#:schema https://docs.jj-vcs.dev/latest/config-schema.json
+
+[user]
+name = "Matan Lurey"
+email = "{{ .email }}"
+
+[ui]
+pager = "delta"
+diff-formatter = ":git"
+
+[merge-tools.delta]
+program = "delta"
+diff-args = ["--color-only"]

@@ -1,0 +1,54 @@
+# Global Agent Instructions
+
+## Version Control
+
+- If a repo has `.jj` (Jujutsu initialized), prefer `jj` over `git` for all write operations (commit, describe, push, bookmark, etc.).
+- Read operations (diff, log, status) can use either, but prefer `jj` for consistency.
+- Use `jj describe` instead of `git commit`, `jj new` instead of `git checkout -b`, `jj bookmark set` + `jj git push` instead of `git push`, etc.
+- For sub-agents that need isolated working copies, use `jj workspace add /tmp/workspace-name` instead of `git worktree`. Clean up with `jj workspace forget` and `rm -rf` the tmp directory when done.
+
+### Multi-agent jj workflow
+
+Workspaces give each agent an isolated working copy while sharing the same repo. All changes are visible in `jj log` from any workspace.
+
+1. Note your current change: `jj log --limit 1`
+2. Per agent: `jj workspace add /tmp/agent-<task>`, then `jj new <parent> -m "task"`
+3. Agent works (all edits auto-tracked, no staging needed)
+4. When done, from your main workspace: `jj rebase -r <agent-change> -d <target>` or `jj squash --from <agent-change> --into <target>`
+5. To combine multiple agents: `jj new <change-a> <change-b>` (merge commit)
+6. Clean up: `jj workspace forget <name> && rm -rf /tmp/agent-<task>`
+
+For sequential (non-parallel) agents, skip workspaces. Just `jj new -m "task"` before each agent runs.
+
+### Non-interactive jj usage
+
+Never use `-i`/`--interactive` flags or commands that open an editor/diff tool. These hang in agent sessions.
+
+- `jj squash` without `-i` moves all changes (no editor needed). Use `--from`/`--into` to be explicit.
+- `jj squash --from <rev> --into <target>` moves all changes from one revision into another.
+- `jj squash [FILESETS...]` to move only specific paths instead of using `-i` to pick interactively.
+- `jj describe -m "message"` sets the description without opening an editor.
+- `jj split [FILESETS...]` splits by paths, not interactively. Without paths it opens a diff editor, so always provide paths.
+- `jj new -m "message"` creates a new change without opening an editor.
+- Always pass `-m` to any command that would otherwise open `$EDITOR`.
+{{ if hasKey . "gheHost" }}
+## Branch and PR Naming ({{ .gheHost }})
+
+Repos on {{ .gheHost }} that use `branch-name-check` enforce these conventions:
+
+**Branch name** must match:
+```
+^(feat(ure)?|(hot|rel)?fix(\(\d+\.\d+\))?|release|chore|ci|docs?|refactor|perf|test|build|style|revert)/[A-Za-z]{1,9}-[0-9]{1,6}-.*
+```
+
+Examples: `fix/SINE-121-broken-datepicker`, `feat/FSW-123-add-new-feature`, `chore/DVOP-101-update-deps`
+
+**PR title** must match:
+```
+^(Revert ")?\[?[A-Z]{1,9}-[0-9]{1,6}\]?: .+
+```
+
+Examples: `FSW-123: Add new BIT feature`, `[DVOP-789]: Add PR title validation`
+
+The ticket prefix (e.g. SINE, FSW, GNC, MOPS, DVOP, DOCS, PC) comes from the team's Jira project. If you don't know the ticket ID, ask the user before pushing.
+{{- end }}

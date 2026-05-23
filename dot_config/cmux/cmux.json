@@ -1,0 +1,262 @@
+{
+  "$schema": "https://raw.githubusercontent.com/manaflow-ai/cmux/main/web/data/cmux.schema.json",
+  "schemaVersion": 1,
+
+  "app": {
+    "appearance": "dark",
+    "warnBeforeQuit": true,
+    "warnBeforeClosingTab": true,
+    "newWorkspacePlacement": "afterCurrent",
+    "workspaceInheritWorkingDirectory": true,
+    "reorderOnNotification": true,
+    "iMessageMode": true
+  },
+
+  "terminal": {
+    "showScrollBar": false,
+    "autoResumeAgentSessions": true
+  },
+
+  "notifications": {
+    "dockBadge": true,
+    "unreadPaneRing": true,
+    "paneFlash": true,
+    "sound": "Pop"
+  },
+
+  "sidebar": {
+    "showBranchDirectory": true,
+    "showPullRequests": true,
+    "showNotificationMessage": true,
+    "showPorts": true,
+    "branchLayout": "vertical"
+  },
+
+  "browser": {
+    "openTerminalLinksInCmuxBrowser": true,
+    "hostsToOpenInEmbeddedBrowser": ["localhost", "127.0.0.1"]
+  },
+
+  "sidebarAppearance": {
+    "matchTerminalBackground": true
+  },
+
+  "automation": {
+    "socketControlMode": "cmuxOnly"
+  },
+
+  "actions": {
+    "pi": {
+      "type": "command",
+      "title": "Pi",
+      "command": "pi",
+      "target": "newTabInCurrentPane",
+      "shortcut": "cmd+shift+p",
+      "icon": { "type": "emoji", "value": "π" }
+    },
+    "lazyjj": {
+      "type": "command",
+      "title": "lazyjj",
+      "command": "lazyjj",
+      "target": "newTabInCurrentPane",
+      "icon": { "type": "emoji", "value": "🥋" }
+    },
+    "nvim": {
+      "type": "command",
+      "title": "nvim",
+      "command": "nvim",
+      "target": "newTabInCurrentPane",
+      "shortcut": "cmd+shift+e",
+      "icon": { "type": "symbol", "name": "pencil" }
+    },
+    "dunk": {
+      "type": "command",
+      "title": "dunk --watch",
+      "command": "dunk diff --watch",
+      "target": "newTabInCurrentPane",
+      "shortcut": "cmd+shift+d",
+      "icon": { "type": "symbol", "name": "eye" }
+    },
+    "dev-workspace": {
+      "type": "workspaceCommand",
+      "title": "Dev Workspace",
+      "commandName": "Dev",
+      "icon": { "type": "symbol", "name": "hammer" }
+    }
+  },
+
+  "ui": {
+    "surfaceTabBar": {
+      "buttons": [
+        "cmux.newTerminal",
+        "cmux.newBrowser",
+        "cmux.splitRight",
+        "cmux.splitDown",
+        "pi",
+        "lazyjj",
+        "nvim",
+        "dunk"
+      ]
+    }
+  },
+
+  "commands": [
+    {
+      "name": "Dev",
+      "description": "Code + Pi + agents side by side",
+      "keywords": ["dev", "code", "agents"],
+      "workspace": {
+        "name": "Dev",
+        "cwd": ".",
+        "color": "#7aa2f7",
+        "layout": {
+          "direction": "horizontal",
+          "split": 0.5,
+          "children": [
+            {
+              "pane": {
+                "surfaces": [
+                  {
+                    "type": "terminal",
+                    "name": "nvim",
+                    "command": "nvim",
+                    "focus": true
+                  },
+                  {
+                    "type": "terminal",
+                    "name": "shell"
+                  }
+                ]
+              }
+            },
+            {
+              "direction": "vertical",
+              "split": 0.5,
+              "children": [
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "pi",
+                        "command": "pi"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "lazyjj",
+                        "command": "lazyjj"
+                      },
+                      {
+                        "type": "terminal",
+                        "name": "herdr",
+                        "command": "herdr"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Ultra-wide",
+      "description": "3-column layout for wide monitors",
+      "keywords": ["uw", "ultrawide", "wide"],
+      "workspace": {
+        "name": "UW",
+        "cwd": ".",
+        "color": "#9ece6a",
+        "layout": {
+          "direction": "horizontal",
+          "split": 0.33,
+          "children": [
+            {
+              "pane": {
+                "surfaces": [
+                  {
+                    "type": "terminal",
+                    "name": "shell",
+                    "focus": true
+                  }
+                ]
+              }
+            },
+            {
+              "direction": "horizontal",
+              "split": 0.5,
+              "children": [
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "shell"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "pane": {
+                    "surfaces": [
+                      {
+                        "type": "terminal",
+                        "name": "herdr",
+                        "command": "herdr-session"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Review",
+      "description": "Dunk diff watcher",
+      "keywords": ["review", "diff", "dunk"],
+      "workspace": {
+        "name": "Review",
+        "cwd": ".",
+        "color": "#bb9af7",
+        "layout": {
+          "direction": "horizontal",
+          "split": 0.5,
+          "children": [
+            {
+              "pane": {
+                "surfaces": [
+                  {
+                    "type": "terminal",
+                    "name": "dunk",
+                    "command": "dunk diff --watch",
+                    "focus": true
+                  }
+                ]
+              }
+            },
+            {
+              "pane": {
+                "surfaces": [
+                  {
+                    "type": "terminal",
+                    "name": "shell"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+eval "$(/opt/homebrew/bin/brew shellenv zsh)"
+
+export EDITOR="nvim"
+
+# Added by swiftly
+. "$HOME/.swiftly/env.sh"
+
+# Local binaries (herdr, etc.)
+export PATH="$HOME/.local/bin:$PATH"
+
+# Go
+export GOPATH="$HOME/go"
+export PATH="$PATH:$GOPATH/bin"
+
+# Ruby
+export PATH="/opt/homebrew/opt/ruby/bin:$PATH"
+export PATH="$HOME/.gem/ruby/4.0.0/bin:$PATH"
+
+# fnm (fast Node manager)
+eval "$(fnm env --use-on-cd --shell zsh)"

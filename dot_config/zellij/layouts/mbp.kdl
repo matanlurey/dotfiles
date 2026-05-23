@@ -1,0 +1,30 @@
+// MBP layout: same tools as uw, spread across tabs for smaller screens
+//
+// Tab "code":   nvim (full screen)
+// Tab "review": dunk diff --watch (full screen)
+// Tab "agents": herdr --session <dirname> (full screen)
+// Use Alt+f for a floating terminal (quake mode)
+
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="zellij:compact-bar"
+        }
+        children
+    }
+
+    tab name="code" focus=true {
+        pane command="nvim" borderless=true
+    }
+
+    tab name="review" {
+        pane command="dunk" borderless=true {
+            args "diff" "--watch"
+        }
+    }
+
+    tab name="agents" {
+        pane command="herdr-session" borderless=true
+    }
+
+}
