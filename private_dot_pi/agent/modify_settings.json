@@ -9,13 +9,14 @@ CURRENT="$(cat)"
 
 # Desired settings — edit these when you change preferences
 DESIRED='{
-  "defaultProvider": "ollama",
-  "defaultModel": "ollama/qwen3.6:27b",
+  "defaultProvider": "google",
+  "defaultModel": "google/gemini-2.5-flash-lite",
   "hideThinkingBlock": false,
-  "defaultThinkingLevel": "medium",
+  "defaultThinkingLevel": "low",
   "enabledModels": [
-    "anthropic/claude-opus-4-6",
-    "anthropic/claude-sonnet-4-6",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-flash-lite",
+    "google/gemini-3.1-pro-preview",
     "ollama/qwen3.6:27b"
   ],
   "packages": [
