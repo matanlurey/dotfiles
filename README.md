@@ -208,12 +208,9 @@ zellij d myproject               # Delete session
 | **glimpseui** | Native WebView window for scripts and agents — used by pi-interview for macOS native dialogs |
 | **pi-agent-browser-native** | Native browser automation tool wrapping agent-browser for web debugging, perf, and QA |
 | **pi-boomerang** | Reconnect and resume pi sessions after restart/crash |
-| **@0xkobold/pi-ollama** | Robust local and cloud Ollama provider with dynamic context sizes and reasoning support |
+| **pi-commandcode-provider** | Connects Pi to the Command Code API (Claude, GPT, DeepSeek V4, Kimi, GLM, Qwen 3.6, and more) |
 | **pi-cmux** | Terminal multiplexer integration for pi |
-
-#### Pi Default Settings
-
-Default provider is **Google** (`gemini-2.5-flash-lite`). Enabled models: `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-3.1-pro-preview`, `ollama/qwen3.6:27b`.
+| **pi-opencode** | Access OpenCode Zen (pay-as-you-go) and OpenCode Go (subscription) models in pi — 40+ models including GPT, Claude, Gemini, and more |
 
 #### Pi MCP Servers
 
@@ -225,7 +222,8 @@ Default provider is **Google** (`gemini-2.5-flash-lite`). Enabled models: `gemin
 
 | Provider | What it does |
 |----------|---------------|
-| **ollama** | Local Qwen3.6 (27B) via Ollama — `ollama serve`, then `/model ollama/qwen3.6:27b` in Pi |
+| **commandcode** | Premium and open-source models via the Command Code API — install `pi-commandcode-provider`, run `/login commandcode` or select from list |
+| **opencode-zen** / **opencode-go** | 40+ models via OpenCode (Zen pay-as-you-go or Go subscription) — install `pi-opencode`, set `OPENCODE_API_KEY`, then `/model opencode-zen/gpt-5.1` |
 
 #### Pi Extensions
 
@@ -246,7 +244,7 @@ Default provider is **Google** (`gemini-2.5-flash-lite`). Enabled models: `gemin
 Managed packages:
 
 - `font-fira-code-nerd-font`
-- `agent-browser`, `bat` (with Tokyo Night theme), `duckdb`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `glow`, `go`, `hunk`, `jj`, `jq`, `k9s`, `lazyjj`, `ollama`, `playwright-cli`, `procs`, `ripgrep`, `starship`, `tokei`, `tree-sitter-cli`, `xan`, `xcodes`, `yazi`, `zellij`, `zoxide`
+- `agent-browser`, `bat` (with Tokyo Night theme), `duckdb`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `glow`, `go`, `hunk`, `jj`, `jq`, `k9s`, `lazyjj`, `playwright-cli`, `procs`, `ripgrep`, `starship`, `tokei`, `xan`, `xcodes`, `yazi`, `zellij`, `zoxide`
 - `jj-hooks` (runs pre-commit/pre-push hooks before jj pushes)
 - `mlux` (Typst-powered terminal markdown viewer; installed from GitHub releases)
 - `fnm`, `zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`

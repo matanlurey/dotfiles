@@ -7,17 +7,15 @@ set -euo pipefail
 CURRENT="$(cat)"
 
 DESIRED='{
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-6",
+  "defaultProvider": "google",
+  "defaultModel": "google/gemini-2.5-flash-lite",
   "hideThinkingBlock": false,
-  "defaultThinkingLevel": "medium",
+  "defaultThinkingLevel": "low",
   "enabledModels": [
-    "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-opus-4-6",
-    "anthropic/claude-haiku-4-5"
-  ],
-  "skills": [
-    "/opt/homebrew/opt/hunk/libexec/skills"
+    "google/gemini-flash-latest",
+    "google/gemini-flash-lite-latest",
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro"
   ],
   "packages": [
     "npm:pi-web-access",
@@ -33,7 +31,9 @@ DESIRED='{
     "npm:@noahsaso/pi-remote",
     "npm:pi-agent-browser-native",
     "https://github.com/nicobailon/pi-boomerang",
-    "https://github.com/devnazim/pi-cmux"
+    "npm:pi-commandcode-provider",
+    "https://github.com/devnazim/pi-cmux",
+    "git:https://github.com/awtotty/pi-opencode.git"
   ]
 }'
 

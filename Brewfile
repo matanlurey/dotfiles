@@ -40,9 +40,6 @@ brew "zoxide"
 brew "neovim"
 cask "visual-studio-code"
 
-# AI
-brew "ollama"
-
 # Apps
 cask "cmux"
 cask "ghostty"
