@@ -32,7 +32,8 @@ DESIRED='{
     "npm:pi-intercom",
     "npm:@noahsaso/pi-remote",
     "npm:pi-agent-browser-native",
-    "https://github.com/nicobailon/pi-boomerang"
+    "https://github.com/nicobailon/pi-boomerang",
+    "npm:@0xkobold/pi-ollama"
   ]
 }'
 
