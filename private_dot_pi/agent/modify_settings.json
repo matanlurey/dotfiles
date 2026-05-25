@@ -30,7 +30,8 @@ DESIRED='{
     "npm:pi-code-previews",
     "npm:pi-intercom",
     "npm:@noahsaso/pi-remote",
-    "npm:pi-agent-browser-native"
+    "npm:pi-agent-browser-native",
+    "https://github.com/nicobailon/pi-boomerang"
   ]
 }'
 

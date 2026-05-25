@@ -210,6 +210,7 @@ zellij d myproject               # Delete session
 | **pi-code-previews** | Live code preview rendering |
 | **pi-intercom** | Cross-session communication between pi agents |
 | **pi-agent-browser-native** | Native browser automation tool wrapping agent-browser for web debugging, perf, and QA |
+| **pi-boomerang** | Reconnect and resume pi sessions after restart/crash |
 
 #### Pi MCP Servers
 
