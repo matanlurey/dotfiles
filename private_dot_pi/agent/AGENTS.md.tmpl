@@ -31,6 +31,12 @@ Never use `-i`/`--interactive` flags or commands that open an editor/diff tool. 
 - `jj split [FILESETS...]` splits by paths, not interactively. Without paths it opens a diff editor, so always provide paths.
 - `jj new -m "message"` creates a new change without opening an editor.
 - Always pass `-m` to any command that would otherwise open `$EDITOR`.
+## GitHub CLI
+
+- Never use `gh` (or `GH_HOST=... gh`) to post, reply to, or leave comments on PRs or issues unless explicitly asked.
+- This includes `gh pr comment`, `gh pr review`, `gh issue comment`, and similar write operations.
+- Read operations (`gh pr view`, `gh pr diff`, `gh issue list`, etc.) are always fine.
+
 {{ if hasKey . "gheHost" }}
 ## Branch and PR Naming ({{ .gheHost }})
 
