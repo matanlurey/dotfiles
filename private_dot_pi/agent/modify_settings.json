@@ -1,26 +1,47 @@
 #!/bin/bash
-# Vast work overlay: Anthropic models via proxy, overrides public dotfiles.
+# Merge desired settings into the existing file, preserving runtime keys
+# (e.g. lastChangelogVersion that pi updates automatically).
 # stdin = current file contents (empty string on first run)
 
 set -euo pipefail
 
 CURRENT="$(cat)"
 
+# Desired settings — edit these when you change preferences
 DESIRED='{
-  "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-4-6",
+  "defaultProvider": "google",
+  "defaultModel": "google/gemini-2.5-flash-lite",
   "hideThinkingBlock": false,
-  "defaultThinkingLevel": "medium",
+  "defaultThinkingLevel": "low",
   "enabledModels": [
-    "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-opus-4-6",
-    "vertex_ai/claude-haiku-4-5@20251001"
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-flash-lite",
+    "google/gemini-3.1-pro-preview",
+    "ollama/qwen3.6:27b"
+  ],
+  "packages": [
+    "npm:pi-web-access",
+    "npm:pi-mcp-adapter",
+    "npm:@burneikis/pi-fzfp",
+    "https://github.com/carderne/pi-nvim",
+    "https://github.com/mitsuhiko/pi-draw",
+    "npm:pi-autoresearch",
+    "npm:pi-interview",
+    "npm:pi-subagents",
+    "npm:pi-code-previews",
+    "npm:pi-intercom",
+    "npm:@noahsaso/pi-remote",
+    "npm:pi-agent-browser-native",
+    "https://github.com/nicobailon/pi-boomerang",
+    "npm:@0xkobold/pi-ollama",
+    "https://github.com/devnazim/pi-cmux"
   ]
 }'
 
 if [ -z "$CURRENT" ]; then
+  # First run — no existing file, just output desired
   echo "$DESIRED" | jq .
 else
-  # Merge: desired keys win, but existing runtime keys (e.g. lastChangelogVersion) are preserved
+  # Merge: desired keys win, but existing runtime keys are preserved
   echo "$CURRENT" | jq --argjson desired "$DESIRED" '. * $desired'
 fi

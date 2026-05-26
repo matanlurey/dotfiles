@@ -212,6 +212,7 @@ zellij d myproject               # Delete session
 | **pi-agent-browser-native** | Native browser automation tool wrapping agent-browser for web debugging, perf, and QA |
 | **pi-boomerang** | Reconnect and resume pi sessions after restart/crash |
 | **@0xkobold/pi-ollama** | Robust local and cloud Ollama provider with dynamic context sizes and reasoning support |
+| **pi-cmux** | Terminal multiplexer integration for pi |
 
 #### Pi MCP Servers
 
