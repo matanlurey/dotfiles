@@ -135,8 +135,7 @@ Leader is `<Space>`. Press `<Space>` and pause to see all keybinds (which-key).
 - **KeepingYouAwake** — Menu bar utility to prevent Mac from sleeping (wraps `caffeinate`)
 - **Superwhisper** — Local Whisper-based voice-to-text, works in terminals
 - **[pi](https://github.com/mariozechner/pi-coding-agent)** — Coding agent (settings, packages, and extensions managed)
-- **[Dunk](https://github.com/amix/dunk)** — Terminal diff viewer with inline review comments for agent workflows (split/stack views, jj support)
-- **[Hunk](https://github.com/modem-dev/hunk)** — Review-first terminal diff viewer with live session daemon, agent annotations, and inline comments
+- **[Hunk](https://github.com/modem-dev/hunk)** — Review-first terminal diff viewer with live session daemon, agent annotations, and inline comments. Has a built-in pi skill: `hunk skill path`
 
 #### cmux Workspace Commands
 
@@ -144,9 +143,9 @@ Leader is `<Space>`. Press `<Space>` and pause to see all keybinds (which-key).
 |---------|--------|--------------|
 | **Dev** | 2-col split | Left: nvim + shell tabs. Right top: pi. Right bottom: lazyjj |
 | **Ultra-wide** | 3-col split | Three columns: shell, shell, shell |
-| **Review** | 2-col split | Left: dunk diff --watch. Right: shell |
+| **Review** | 2-col split | Left: hunk diff. Right: shell |
 
-cmux also adds Pi, lazyjj, nvim, and dunk as surface tab bar buttons (Cmd+Shift+P for pi, Cmd+Shift+E for nvim, Cmd+Shift+D for dunk --watch).
+cmux also adds Pi, lazyjj, nvim, and hunk as surface tab bar buttons (Cmd+Shift+P for pi, Cmd+Shift+E for nvim, Cmd+Shift+D for hunk diff).
 
 #### Ghostty Shaders
 
@@ -240,7 +239,6 @@ Default provider is **Google** (`gemini-2.5-flash-lite`). Enabled models: `gemin
 
 | Skill | What it does |
 |-------|---------------|
-| **dunk-review** | Reads `dunk comments` from a review session and addresses each one (fix code, resolve comment) |
 | **grill-me** | Conducts a rigorous technical interview on the current codebase using pi-interview |
 
 ### Brewfile
@@ -450,7 +448,7 @@ dot_config/bat/themes/             # bat syntax themes (tokyonight_night)
 dot_config/delta/themes.gitconfig  # Delta diff viewer config
 dot_config/jj/config.toml.tmpl    # Jujutsu VCS config (templated email)
 dot_gitconfig.tmpl                # Git config (templated email, conditional URL rewrites)
-dot_gitignore_global              # Global gitignore (.DS_Store, .idea, .dunk, etc.)
+dot_gitignore_global              # Global gitignore (.DS_Store, .idea, etc.)
 dot_config/nvim/init.lua          # Neovim config
 dot_config/starship.toml          # Starship prompt config
 private_dot_pi/agent/AGENTS.md.tmpl       # Agent instructions (data-driven optional sections)

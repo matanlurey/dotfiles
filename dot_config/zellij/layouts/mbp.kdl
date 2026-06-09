@@ -1,7 +1,7 @@
 // MBP layout: same tools as uw, spread across tabs for smaller screens
 //
 // Tab "code":   nvim (full screen)
-// Tab "review": dunk diff --watch (full screen)
+// Tab "review": hunk diff (full screen)
 // Tab "term":   shell (full screen)
 // Use Alt+f for a floating terminal (quake mode)
 
@@ -18,8 +18,8 @@ layout {
     }
 
     tab name="review" {
-        pane command="dunk" borderless=true {
-            args "diff" "--watch"
+        pane command="hunk" borderless=true {
+            args "diff"
         }
     }
 

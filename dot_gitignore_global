@@ -15,7 +15,6 @@
 .pi/
 .agents/
 .claude/
-.dunk/
 
 # JFrog
 .jfrog/

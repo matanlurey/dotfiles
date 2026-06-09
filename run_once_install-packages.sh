@@ -25,7 +25,7 @@ if command -v fnm &>/dev/null; then
         fnm default lts-latest
     fi
     echo "Installing pi and packages..."
-    npm install -g @earendil-works/pi-coding-agent @burneikis/pi-fzfp @makeplane/plane-mcp-server @noahsaso/pi-remote dunkdiff
+    npm install -g @earendil-works/pi-coding-agent @burneikis/pi-fzfp @makeplane/plane-mcp-server @noahsaso/pi-remote
 
     # Wrapper script for pi in ~/.local/bin so it's available in non-login shells
     # Uses a wrapper instead of a symlink so pi can resolve its own install location for self-update

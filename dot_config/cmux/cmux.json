@@ -69,10 +69,10 @@
       "shortcut": "cmd+shift+e",
       "icon": { "type": "symbol", "name": "pencil" }
     },
-    "dunk": {
+    "hunk": {
       "type": "command",
-      "title": "dunk --watch",
-      "command": "dunk diff --watch",
+      "title": "hunk diff",
+      "command": "hunk diff",
       "target": "newTabInCurrentPane",
       "shortcut": "cmd+shift+d",
       "icon": { "type": "symbol", "name": "eye" }
@@ -95,7 +95,7 @@
         "pi",
         "lazyjj",
         "nvim",
-        "dunk"
+        "hunk"
       ]
     }
   },
@@ -216,8 +216,8 @@
     },
     {
       "name": "Review",
-      "description": "Dunk diff watcher",
-      "keywords": ["review", "diff", "dunk"],
+      "description": "Hunk diff viewer",
+      "keywords": ["review", "diff", "hunk"],
       "workspace": {
         "name": "Review",
         "cwd": ".",
@@ -231,8 +231,8 @@
                 "surfaces": [
                   {
                     "type": "terminal",
-                    "name": "dunk",
-                    "command": "dunk diff --watch",
+                    "name": "hunk",
+                    "command": "hunk diff",
                     "focus": true
                   }
                 ]
