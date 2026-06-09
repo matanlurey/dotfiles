@@ -424,6 +424,9 @@ require("lazy").setup({
     },
     opts = {},
   },
+
+  -- Machine-specific extras (loaded from lua/plugins/extras.lua if present)
+  { import = "plugins.extras", optional = true },
 })
 
 -- LSP server configs (native 0.12 API)
