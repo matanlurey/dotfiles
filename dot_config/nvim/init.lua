@@ -56,32 +56,8 @@ vim.opt.timeoutlen = 300
 vim.opt.list = true
 vim.opt.listchars = { tab = "» ", trail = "·", nbsp = "␣" }
 
--- Show colorcolumn based on textwidth (set by .editorconfig's max_line_length)
--- BufWinEnter fires after editorconfig has applied options; OptionSet catches
--- later changes but needs a defer to get the correct window context.
-vim.api.nvim_create_autocmd({"BufWinEnter"}, {
-  callback = function()
-    local tw = vim.bo.textwidth
-    if tw and tw > 0 then
-      vim.wo.colorcolumn = tostring(tw)
-    else
-      vim.wo.colorcolumn = ""
-    end
-  end,
-})
-vim.api.nvim_create_autocmd("OptionSet", {
-  pattern = "textwidth",
-  callback = function()
-    vim.schedule(function()
-      local tw = vim.bo.textwidth
-      if tw and tw > 0 then
-        vim.wo.colorcolumn = tostring(tw)
-      else
-        vim.wo.colorcolumn = ""
-      end
-    end)
-  end,
-})
+-- Track textwidth (set by .editorconfig) for the colorcolumn guide.
+vim.opt.colorcolumn = "+0"
 
 -- Keymaps
 vim.keymap.set("n", "<Esc>", "<cmd>nohlsearch<CR>")
