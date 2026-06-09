@@ -82,10 +82,8 @@ Leader is `<Space>`. Press `<Space>` and pause to see all keybinds (which-key).
 
 | Key / Command | Action |
 |---------------|--------|
-| gutter signs | Added/changed/deleted lines (automatic) |
-| `:J log` | Jujutsu log |
-| `:J describe "msg"` | Set jj commit message |
-| `:J new` | Create new jj change |
+| gutter signs | Added/changed/deleted lines via signify (git, jj, and more) |
+| `]c` / `[c` | Next / previous hunk |
 
 **GitHub PR Reviews (gh-review.nvim, works with GHE)**
 

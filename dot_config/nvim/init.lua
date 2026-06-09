@@ -265,19 +265,8 @@ require("lazy").setup({
     opts = {},
   },
 
-  -- Git signs in gutter
-  {
-    "lewis6991/gitsigns.nvim",
-    opts = {},
-  },
-
-  -- JJ integration
-  {
-    "NicolasGB/jj.nvim",
-    dependencies = { "nvim-lua/plenary.nvim" },
-    cmd = "J",
-    opts = {},
-  },
+  -- VCS signs in gutter (git, jj, and more)
+  { "mhinz/vim-signify" },
 
   -- Auto-close brackets/quotes
   {
