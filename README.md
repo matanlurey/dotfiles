@@ -143,9 +143,9 @@ Leader is `<Space>`. Press `<Space>` and pause to see all keybinds (which-key).
 |---------|--------|--------------|
 | **Dev** | 2-col split | Left: nvim + shell tabs. Right top: pi. Right bottom: lazyjj |
 | **Ultra-wide** | 3-col split | Three columns: shell, shell, shell |
-| **Review** | 2-col split | Left: hunk diff. Right: shell |
+| **Review** | 2-col split | Left: hunk diff --watch. Right: shell |
 
-cmux also adds Pi, lazyjj, nvim, and hunk as surface tab bar buttons (Cmd+Shift+P for pi, Cmd+Shift+E for nvim, Cmd+Shift+D for hunk diff).
+cmux also adds Pi, lazyjj, nvim, and hunk as surface tab bar buttons (Cmd+Shift+P for pi, Cmd+Shift+E for nvim, Cmd+Shift+D for hunk --watch).
 
 #### Ghostty Shaders
 

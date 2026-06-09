@@ -71,8 +71,8 @@
     },
     "hunk": {
       "type": "command",
-      "title": "hunk diff",
-      "command": "hunk diff",
+      "title": "hunk --watch",
+      "command": "hunk diff --watch",
       "target": "newTabInCurrentPane",
       "shortcut": "cmd+shift+d",
       "icon": { "type": "symbol", "name": "eye" }
@@ -232,7 +232,7 @@
                   {
                     "type": "terminal",
                     "name": "hunk",
-                    "command": "hunk diff",
+                    "command": "hunk diff --watch",
                     "focus": true
                   }
                 ]
