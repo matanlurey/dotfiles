@@ -151,11 +151,6 @@
                         "type": "terminal",
                         "name": "lazyjj",
                         "command": "lazyjj"
-                      },
-                      {
-                        "type": "terminal",
-                        "name": "herdr",
-                        "command": "herdr"
                       }
                     ]
                   }
@@ -208,8 +203,7 @@
                     "surfaces": [
                       {
                         "type": "terminal",
-                        "name": "herdr",
-                        "command": "herdr-session"
+                        "name": "shell"
                       }
                     ]
                   }

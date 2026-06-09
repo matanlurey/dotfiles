@@ -16,12 +16,6 @@ if command -v bat &>/dev/null; then
     bat cache --build
 fi
 
-# Install herdr (terminal workspace manager for coding agents)
-if ! command -v herdr &>/dev/null; then
-    echo "Installing herdr..."
-    curl -fsSL https://herdr.dev/install.sh | sh
-fi
-
 # Install Node.js via fnm and pi coding agent
 if command -v fnm &>/dev/null; then
     eval "$(fnm env)"
@@ -33,7 +27,7 @@ if command -v fnm &>/dev/null; then
     echo "Installing pi and packages..."
     npm install -g @earendil-works/pi-coding-agent @burneikis/pi-fzfp @makeplane/plane-mcp-server @noahsaso/pi-remote dunkdiff
 
-    # Wrapper script for pi in ~/.local/bin so it's available in non-login shells (e.g. herdr)
+    # Wrapper script for pi in ~/.local/bin so it's available in non-login shells
     # Uses a wrapper instead of a symlink so pi can resolve its own install location for self-update
     mkdir -p "$HOME/.local/bin"
     cat > "$HOME/.local/bin/pi" <<'WRAPPER'

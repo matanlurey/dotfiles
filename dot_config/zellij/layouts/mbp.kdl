@@ -2,7 +2,7 @@
 //
 // Tab "code":   nvim (full screen)
 // Tab "review": dunk diff --watch (full screen)
-// Tab "agents": herdr --session <dirname> (full screen)
+// Tab "term":   shell (full screen)
 // Use Alt+f for a floating terminal (quake mode)
 
 layout {
@@ -23,8 +23,8 @@ layout {
         }
     }
 
-    tab name="agents" {
-        pane command="herdr-session" borderless=true
+    tab name="term" {
+        pane borderless=true
     }
 
 }

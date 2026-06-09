@@ -40,5 +40,5 @@ Personal macOS dotfiles managed with [chezmoi](https://www.chezmoi.io/). The goa
 - **Secrets go in `~/.zsh_secrets`**, never in tracked files. The `dot_zshrc` sources this file automatically.
 - **`dot_zprofile`** is for login shell setup: environment variables, PATH modifications.
 - **`dot_zshrc`** is for interactive shell setup: plugins, prompt init, lazy loaders.
-- **Brewfile** is for Homebrew-managed packages only. Tools without a Homebrew formula (like herdr) go in `run_once_install-packages.sh`.
+- **Brewfile** is for Homebrew-managed packages only. Tools without a Homebrew formula go in `run_once_install-packages.sh`.
 - **Pi changes go in this repo** (`private_dot_pi/`). When asked to install pi packages, add extensions, or change pi settings, update the chezmoi-managed files so all future machines get it — unless explicitly told to do it locally only.

@@ -5,7 +5,7 @@ export EDITOR="nvim"
 # Added by swiftly
 . "$HOME/.swiftly/env.sh"
 
-# Local binaries (herdr, etc.)
+# Local binaries
 export PATH="$HOME/.local/bin:$PATH"
 
 # Go

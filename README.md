@@ -137,7 +137,6 @@ Leader is `<Space>`. Press `<Space>` and pause to see all keybinds (which-key).
 - **KeepingYouAwake** — Menu bar utility to prevent Mac from sleeping (wraps `caffeinate`)
 - **Superwhisper** — Local Whisper-based voice-to-text, works in terminals
 - **[pi](https://github.com/mariozechner/pi-coding-agent)** — Coding agent (settings, packages, and extensions managed)
-- **[Herdr](https://herdr.dev/)** — Terminal workspace manager for coding agents
 - **[Dunk](https://github.com/amix/dunk)** — Terminal diff viewer with inline review comments for agent workflows (split/stack views, jj support)
 - **[Hunk](https://github.com/modem-dev/hunk)** — Review-first terminal diff viewer with live session daemon, agent annotations, and inline comments
 
@@ -145,8 +144,8 @@ Leader is `<Space>`. Press `<Space>` and pause to see all keybinds (which-key).
 
 | Command | Layout | What it does |
 |---------|--------|--------------|
-| **Dev** | 2-col split | Left: nvim + shell tabs. Right top: pi. Right bottom: lazyjj + herdr tabs |
-| **Ultra-wide** | 3-col split | Three columns: shell, shell, herdr-session |
+| **Dev** | 2-col split | Left: nvim + shell tabs. Right top: pi. Right bottom: lazyjj |
+| **Ultra-wide** | 3-col split | Three columns: shell, shell, shell |
 | **Review** | 2-col split | Left: dunk diff --watch. Right: shell |
 
 cmux also adds Pi, lazyjj, nvim, and dunk as surface tab bar buttons (Cmd+Shift+P for pi, Cmd+Shift+E for nvim, Cmd+Shift+D for dunk --watch).
@@ -209,10 +208,15 @@ zellij d myproject               # Delete session
 | **pi-subagents** | Spawn sub-agents for parallel task execution |
 | **pi-code-previews** | Live code preview rendering |
 | **pi-intercom** | Cross-session communication between pi agents |
+| **glimpseui** | Native WebView window for scripts and agents — used by pi-interview for macOS native dialogs |
 | **pi-agent-browser-native** | Native browser automation tool wrapping agent-browser for web debugging, perf, and QA |
 | **pi-boomerang** | Reconnect and resume pi sessions after restart/crash |
 | **@0xkobold/pi-ollama** | Robust local and cloud Ollama provider with dynamic context sizes and reasoning support |
 | **pi-cmux** | Terminal multiplexer integration for pi |
+
+#### Pi Default Settings
+
+Default provider is **Google** (`gemini-2.5-flash-lite`). Enabled models: `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-3.1-pro-preview`, `ollama/qwen3.6:27b`.
 
 #### Pi MCP Servers
 
@@ -224,7 +228,7 @@ zellij d myproject               # Delete session
 
 | Provider | What it does |
 |----------|---------------|
-| **ollama** | Local Qwen3-Coder (30B) via Ollama — `ollama serve`, then `/model ollama/qwen3-coder:30b` in Pi |
+| **ollama** | Local Qwen3.6 (27B) via Ollama — `ollama serve`, then `/model ollama/qwen3.6:27b` in Pi |
 
 #### Pi Extensions
 
@@ -246,10 +250,10 @@ zellij d myproject               # Delete session
 Managed packages:
 
 - `font-fira-code-nerd-font`
-- `agent-browser`, `bat` (with Tokyo Night theme), `duckdb`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `glow`, `go`, `hunk`, `jj`, `jq`, `k9s`, `lazyjj`, `ollama`, `playwright-cli`, `procs`, `ripgrep`, `starship`, `tokei`, `xan`, `xcodes`, `yazi`, `zellij`, `zoxide`
-- `zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
+- `agent-browser`, `bat` (with Tokyo Night theme), `duckdb`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `glow`, `go`, `hunk`, `jj`, `jq`, `k9s`, `lazyjj`, `ollama`, `playwright-cli`, `procs`, `ripgrep`, `starship`, `tokei`, `tree-sitter-cli`, `xan`, `xcodes`, `yazi`, `zellij`, `zoxide`
+- `fnm`, `zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
 - `neovim`, `visual-studio-code`
-- `cmux`, `ghostty`, `keepingyouawake`
+- `cmux`, `ghostty`, `keepingyouawake`, `superwhisper`
 
 ## Getting Started
 
@@ -444,7 +448,6 @@ dot_config/cmux/cmux.json         # cmux terminal config (workspace commands, ac
 dot_config/ghostty/               # Ghostty terminal emulator config
 dot_config/zellij/config.kdl      # Zellij multiplexer config (Tokyo Night)
 dot_config/zellij/layouts/        # Zellij layouts (dev: full workflow; uw: ultra-wide single-tab; mbp: laptop 3-tab)
-private_dot_local/private_bin/     # Wrapper scripts (~/.local/bin) -- herdr-session
 dot_config/bat/themes/             # bat syntax themes (tokyonight_night)
 dot_config/delta/themes.gitconfig  # Delta diff viewer config
 dot_config/jj/config.toml.tmpl    # Jujutsu VCS config (templated email)
@@ -457,5 +460,5 @@ private_dot_pi/agent/mcp.json.tmpl        # MCP servers (data-driven, empty by d
 private_dot_pi/agent/models.json.tmpl     # AI providers (data-driven proxy override)
 private_dot_pi/agent/modify_settings.json # pi settings + packages (modify script)
 private_Library/                  # VS Code settings
-run_once_install-packages.sh      # Runs once: brew bundle + herdr install
+run_once_install-packages.sh      # Runs once: brew bundle + pi install
 ```

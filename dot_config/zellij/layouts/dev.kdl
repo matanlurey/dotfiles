@@ -3,7 +3,6 @@
 // Tab "code":   nvim (full screen, no args — use file picker to navigate)
 // Tab "pi":     pi (full screen)
 // Tab "jj":     lazyjj (full screen)
-// Tab "agents": herdr (full screen)
 // Tab "term":   shell (full screen)
 
 layout {
@@ -24,10 +23,6 @@ layout {
 
     tab name="jj" {
         pane command="lazyjj" borderless=true
-    }
-
-    tab name="agents" {
-        pane command="herdr" borderless=true
     }
 
     tab name="term" {
