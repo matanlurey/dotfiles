@@ -1,3 +1,4 @@
 # Extra files added by machine-specific overlays
 private_dot_pi/agent/mcp.json.tmpl
+private_dot_pi/agent/skills/blast/
 dot_config/nvim/lua/
