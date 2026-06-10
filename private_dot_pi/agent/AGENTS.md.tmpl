@@ -7,6 +7,42 @@
 - Use `jj describe` instead of `git commit`, `jj new` instead of `git checkout -b`, `jj bookmark set` + `jj git push` instead of `git push`, etc.
 - For sub-agents that need isolated working copies, use `jj workspace add /tmp/workspace-name` instead of `git worktree`. Clean up with `jj workspace forget` and `rm -rf` the tmp directory when done.
 
+### Commit discipline
+
+**Never squash commits.** Always prefer multiple, well-described commits. Squashing destroys reviewer context and makes `git blame` / `jj log` useless. Each logical change gets its own commit with a clear message.
+
+Use `jj new -m "message"` to start the next commit. If a change needs to be split, use `jj split [FILESETS...]` by path — never interactively.
+
+### Pushing to PRs under review
+
+jj rewrites commit SHAs on any mutation (describe, squash, rebase), which means
+`jj git push` is always a force push. GitHub tracks review state by commit SHA,
+so force pushes destroy reviewer context: "viewed" markers reset, inline
+comments get orphaned, and the "Changes since last review" diff breaks.
+
+**Before pushing, check if the branch has an open PR with reviews:**
+
+```bash
+# For github.com repos:
+gh pr list --head "$(jj bookmark list --all -T 'if(self.tracked(), name ++ "\n")' | head -1)" --json number,reviewDecision,reviews --jq '.[0]'
+
+# For code.vastspace.com repos:
+GH_HOST=code.vastspace.com gh pr list --head "$(jj bookmark list --all -T 'if(self.tracked(), name ++ "\n")' | head -1)" --json number,reviewDecision,reviews --jq '.[0]'
+```
+
+**If the PR has reviews:**
+
+- **Add new commits on top** with `jj new -m "address review feedback"`. Do
+  not amend, squash into, or rebase already-pushed commits.
+- **Do not rebase onto main/trunk** unless there are conflicts or the user
+  explicitly asks. An unnecessary rebase rewrites every commit in the stack.
+- **Do not `jj describe`** on already-pushed commits (it rewrites their SHA).
+- **Warn the user** before any push that will force-push over reviewed commits.
+  Explain what reviewer context will be lost.
+
+**If the PR has no reviews yet**, normal jj workflow applies (amend, rebase,
+describe freely).
+
 ### Multi-agent jj workflow
 
 Workspaces give each agent an isolated working copy while sharing the same repo. All changes are visible in `jj log` from any workspace.
@@ -14,8 +50,8 @@ Workspaces give each agent an isolated working copy while sharing the same repo.
 1. Note your current change: `jj log --limit 1`
 2. Per agent: `jj workspace add /tmp/agent-<task>`, then `jj new <parent> -m "task"`
 3. Agent works (all edits auto-tracked, no staging needed)
-4. When done, from your main workspace: `jj rebase -r <agent-change> -d <target>` or `jj squash --from <agent-change> --into <target>`
-5. To combine multiple agents: `jj new <change-a> <change-b>` (merge commit)
+4. When done, from your main workspace: `jj rebase -r <agent-change> -d <target>` to land the change as its own commit
+5. To combine multiple agents as a merge: `jj new <change-a> <change-b>`
 6. Clean up: `jj workspace forget <name> && rm -rf /tmp/agent-<task>`
 
 For sequential (non-parallel) agents, skip workspaces. Just `jj new -m "task"` before each agent runs.
@@ -24,13 +60,12 @@ For sequential (non-parallel) agents, skip workspaces. Just `jj new -m "task"` b
 
 Never use `-i`/`--interactive` flags or commands that open an editor/diff tool. These hang in agent sessions.
 
-- `jj squash` without `-i` moves all changes (no editor needed). Use `--from`/`--into` to be explicit.
-- `jj squash --from <rev> --into <target>` moves all changes from one revision into another.
-- `jj squash [FILESETS...]` to move only specific paths instead of using `-i` to pick interactively.
 - `jj describe -m "message"` sets the description without opening an editor.
 - `jj split [FILESETS...]` splits by paths, not interactively. Without paths it opens a diff editor, so always provide paths.
 - `jj new -m "message"` creates a new change without opening an editor.
+- `jj rebase -r <rev> -d <dest>` moves a commit without squashing it.
 - Always pass `-m` to any command that would otherwise open `$EDITOR`.
+
 ## GitHub CLI
 
 - Never use `gh` (or `GH_HOST=... gh`) to post, reply to, or leave comments on PRs or issues unless explicitly asked.

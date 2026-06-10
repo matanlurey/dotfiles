@@ -1,23 +1,20 @@
 #!/bin/bash
-# Merge desired settings into the existing file, preserving runtime keys
-# (e.g. lastChangelogVersion that pi updates automatically).
+# Vast work overlay: Anthropic models via proxy, overrides public dotfiles.
 # stdin = current file contents (empty string on first run)
 
 set -euo pipefail
 
 CURRENT="$(cat)"
 
-# Desired settings — edit these when you change preferences
 DESIRED='{
-  "defaultProvider": "google",
-  "defaultModel": "google/gemini-2.5-flash-lite",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-4-6",
   "hideThinkingBlock": false,
-  "defaultThinkingLevel": "low",
+  "defaultThinkingLevel": "medium",
   "enabledModels": [
-    "google/gemini-2.5-flash",
-    "google/gemini-2.5-flash-lite",
-    "google/gemini-3.1-pro-preview",
-    "ollama/qwen3.6:27b"
+    "anthropic/claude-sonnet-4-6",
+    "anthropic/claude-opus-4-6",
+    "anthropic/claude-haiku-4-5"
   ],
   "packages": [
     "npm:pi-web-access",
@@ -31,18 +28,15 @@ DESIRED='{
     "npm:pi-code-previews",
     "npm:pi-intercom",
     "npm:@noahsaso/pi-remote",
-    "npm:glimpseui",
     "npm:pi-agent-browser-native",
     "https://github.com/nicobailon/pi-boomerang",
-    "npm:@0xkobold/pi-ollama",
     "https://github.com/devnazim/pi-cmux"
   ]
 }'
 
 if [ -z "$CURRENT" ]; then
-  # First run — no existing file, just output desired
   echo "$DESIRED" | jq .
 else
-  # Merge: desired keys win, but existing runtime keys are preserved
+  # Merge: desired keys win, but existing runtime keys (e.g. lastChangelogVersion) are preserved
   echo "$CURRENT" | jq --argjson desired "$DESIRED" '. * $desired'
 fi
