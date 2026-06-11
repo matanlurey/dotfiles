@@ -8,6 +8,9 @@ email = "{{ .email }}"
 pager = "delta"
 diff-formatter = ":git"
 
+[aliases]
+push = ["util", "exec", "--", "jj-hp", "push"]
+
 [merge-tools.delta]
 program = "delta"
 diff-args = ["--color-only"]

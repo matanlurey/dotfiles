@@ -247,6 +247,7 @@ Managed packages:
 
 - `font-fira-code-nerd-font`
 - `agent-browser`, `bat` (with Tokyo Night theme), `duckdb`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `glow`, `go`, `hunk`, `jj`, `jq`, `k9s`, `lazyjj`, `ollama`, `playwright-cli`, `procs`, `ripgrep`, `starship`, `tokei`, `tree-sitter-cli`, `xan`, `xcodes`, `yazi`, `zellij`, `zoxide`
+- `jj-hooks` (runs pre-commit/pre-push hooks before jj pushes)
 - `fnm`, `zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
 - `neovim`, `visual-studio-code`
 - `cmux`, `ghostty`, `keepingyouawake`, `superwhisper`
@@ -373,6 +374,7 @@ glow -p README.md              # Pager mode for long docs
 jj log                         # Show commit graph
 jj describe -m "message"       # Set commit message
 jj new                         # Create new empty change
+jj push                        # Push (runs pre-commit hooks first via jj-hooks)
 ```
 
 ### jq — JSON processor

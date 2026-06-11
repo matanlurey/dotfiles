@@ -16,6 +16,19 @@ if command -v bat &>/dev/null; then
     bat cache --build
 fi
 
+# Install jj-hooks (pre-commit/pre-push hooks for jj)
+if ! command -v jj-hp &>/dev/null; then
+    echo "Installing jj-hooks..."
+    JJ_HOOKS_VERSION="0.3.5"
+    curl -sL "https://github.com/mattwilkinsonn/zireael/releases/download/v${JJ_HOOKS_VERSION}/jj-hooks-v${JJ_HOOKS_VERSION}-darwin-arm64.tar.gz" -o /tmp/jj-hooks.tar.gz
+    tar xzf /tmp/jj-hooks.tar.gz -C /tmp
+    mkdir -p "$HOME/.local/bin"
+    cp /tmp/jj-hooks-v${JJ_HOOKS_VERSION}-darwin-arm64/jj-hooks "$HOME/.local/bin/"
+    cp /tmp/jj-hooks-v${JJ_HOOKS_VERSION}-darwin-arm64/jj-hp "$HOME/.local/bin/"
+    rm -rf /tmp/jj-hooks.tar.gz /tmp/jj-hooks-v${JJ_HOOKS_VERSION}-darwin-arm64
+    echo "Installed jj-hooks $(jj-hp --version)"
+fi
+
 # Install Node.js via fnm and pi coding agent
 if command -v fnm &>/dev/null; then
     eval "$(fnm env)"
