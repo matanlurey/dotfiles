@@ -248,6 +248,7 @@ Managed packages:
 - `font-fira-code-nerd-font`
 - `agent-browser`, `bat` (with Tokyo Night theme), `duckdb`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `glow`, `go`, `hunk`, `jj`, `jq`, `k9s`, `lazyjj`, `ollama`, `playwright-cli`, `procs`, `ripgrep`, `starship`, `tokei`, `tree-sitter-cli`, `xan`, `xcodes`, `yazi`, `zellij`, `zoxide`
 - `jj-hooks` (runs pre-commit/pre-push hooks before jj pushes)
+- `mlux` (Typst-powered terminal markdown viewer; installed from GitHub releases)
 - `fnm`, `zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
 - `neovim`, `visual-studio-code`
 - `cmux`, `ghostty`, `keepingyouawake`, `superwhisper`
@@ -366,6 +367,15 @@ Configured as the default pager for `jj`. No direct usage needed — diffs are a
 ```bash
 glow README.md                 # Render markdown in terminal
 glow -p README.md              # Pager mode for long docs
+```
+
+### mlux — Typst-powered markdown viewer
+
+Renders markdown through Typst's typesetting engine with inline images, LaTeX math, and Mermaid diagrams. Requires a Kitty-protocol terminal (Ghostty, Kitty, WezTerm).
+
+```bash
+mlux README.md                 # View markdown with Typst rendering
+mlux --watch README.md         # Auto-reload on file change
 ```
 
 ### jj — Jujutsu VCS

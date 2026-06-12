@@ -29,6 +29,17 @@ if ! command -v jj-hp &>/dev/null; then
     echo "Installed jj-hooks $(jj-hp --version)"
 fi
 
+# Install mlux (Typst-powered terminal markdown viewer)
+if ! command -v mlux &>/dev/null; then
+    echo "Installing mlux..."
+    MLUX_VERSION="2.4.0"
+    curl -sL "https://github.com/saka1/mlux/releases/download/v${MLUX_VERSION}/mlux-v${MLUX_VERSION}-aarch64-apple-darwin.tar.gz" -o /tmp/mlux.tar.gz
+    tar xzf /tmp/mlux.tar.gz -C /tmp
+    cp "/tmp/mlux-v${MLUX_VERSION}-aarch64-apple-darwin/mlux" /opt/homebrew/bin/mlux
+    rm -rf /tmp/mlux.tar.gz "/tmp/mlux-v${MLUX_VERSION}-aarch64-apple-darwin"
+    echo "Installed mlux $(mlux --version)"
+fi
+
 # Install Node.js via fnm and pi coding agent
 if command -v fnm &>/dev/null; then
     eval "$(fnm env)"
