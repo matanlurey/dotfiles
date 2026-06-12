@@ -468,8 +468,7 @@ vim.opt.completeopt = "menu,menuone,noselect"
 vim.api.nvim_create_autocmd("LspAttach", {
   callback = function(event)
     -- Enable native LSP completion
-    vim.lsp.completion.enable(true, event.data.client_id, event.buf, { autotrigger = false })
-    vim.keymap.set("i", "<C-Space>", vim.lsp.completion.get, { buffer = event.buf, desc = "Trigger completion" })
+    vim.lsp.completion.enable(true, event.data.client_id, event.buf, { autotrigger = true })
 
     -- LSP keymaps
     local map = function(keys, func, desc)
