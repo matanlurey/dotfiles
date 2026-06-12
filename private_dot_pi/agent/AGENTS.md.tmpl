@@ -67,6 +67,10 @@ Never use `-i`/`--interactive` flags or commands that open an editor/diff tool. 
 - `jj rebase -r <rev> -d <dest>` moves a commit without squashing it.
 - Always pass `-m` to any command that would otherwise open `$EDITOR`.
 
+## Personal Notes
+
+The `.matan/` directory is gitignored globally and is the conventional place for personal notes, scratch files, and local context that should never be committed. Feel free to create or read `.matan/` in any repo for repo-specific notes.
+
 ## GitHub CLI
 
 - Never use `gh` (or `GH_HOST=... gh`) to post, reply to, or leave comments on PRs or issues unless explicitly asked.

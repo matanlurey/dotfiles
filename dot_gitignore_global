@@ -11,6 +11,9 @@
 *.swo
 *~
 
+# Personal notes (see AGENTS.md)
+.matan/
+
 # AI agents
 .pi/
 .agents/
