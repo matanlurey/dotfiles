@@ -16,6 +16,9 @@ DESIRED='{
     "anthropic/claude-opus-4-6",
     "anthropic/claude-haiku-4-5"
   ],
+  "skills": [
+    "/opt/homebrew/opt/hunk/libexec/skills"
+  ],
   "packages": [
     "npm:pi-web-access",
     "npm:pi-mcp-adapter",
