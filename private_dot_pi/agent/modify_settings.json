@@ -7,16 +7,16 @@ set -euo pipefail
 CURRENT="$(cat)"
 
 DESIRED='{
-  "defaultProvider": "google",
-  "defaultModel": "google/gemini-2.5-flash-lite",
+  "defaultProvider": "opencode-go",
+  "defaultModel": "opencode-go/kimi-k2.7-code",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "low",
   "enabledModels": [
+    "opencode-go/kimi-k2.7-code",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-pro",
-    "oc-sdk-go/kimi-k2.6"
+    "deepseek/deepseek-v4-pro"
   ],
   "packages": [
     "npm:pi-web-access",
