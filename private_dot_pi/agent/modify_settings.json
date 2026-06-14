@@ -15,7 +15,8 @@ DESIRED='{
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-pro"
+    "deepseek/deepseek-v4-pro",
+    "oc-sdk-go/kimi-k2.6"
   ],
   "packages": [
     "npm:pi-web-access",
