@@ -1,3 +1,5 @@
 {
-  "summaryModel": "deepseek/deepseek-v4-flash"
+  "provider": "auto",
+  "summaryModel": "deepseek/deepseek-v4-flash",
+  "workflow": "none"
 }
