@@ -39,8 +39,18 @@ DESIRED='{
 }'
 
 if [ -z "$CURRENT" ]; then
-  echo "$DESIRED" | jq .
+  MERGED="$(echo "$DESIRED" | jq .)"
 else
   # Merge: desired keys win, but existing runtime keys (e.g. lastChangelogVersion) are preserved
-  echo "$CURRENT" | jq --argjson desired "$DESIRED" '. * $desired'
+  MERGED="$(echo "$CURRENT" | jq --argjson desired "$DESIRED" '. * $desired')"
 fi
+
+# Add Hunk review skill if hunk is installed (portable across machines / install prefixes)
+if command -v hunk >/dev/null 2>&1; then
+  HUNK_SKILL_DIR="$(dirname "$(hunk skill path 2>/dev/null)")"
+  if [ -n "$HUNK_SKILL_DIR" ] && [ -d "$HUNK_SKILL_DIR" ]; then
+    MERGED="$(echo "$MERGED" | jq --arg path "$HUNK_SKILL_DIR" '.skills = ((.skills // []) + [$path] | unique)')"
+  fi
+fi
+
+echo "$MERGED"
