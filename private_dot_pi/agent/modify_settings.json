@@ -7,11 +7,12 @@ set -euo pipefail
 CURRENT="$(cat)"
 
 DESIRED='{
-  "defaultProvider": "opencode-go",
-  "defaultModel": "opencode-go/kimi-k2.7-code",
+  "defaultProvider": "cursorapi",
+  "defaultModel": "composer-2.5",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "low",
   "enabledModels": [
+    "cursorapi/composer-2.5",
     "opencode-go/kimi-k2.7-code",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
