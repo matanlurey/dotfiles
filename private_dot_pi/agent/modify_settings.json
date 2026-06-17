@@ -7,13 +7,11 @@ set -euo pipefail
 CURRENT="$(cat)"
 
 DESIRED='{
-  "defaultProvider": "cursorapi",
-  "defaultModel": "composer-2.5",
+  "defaultProvider": "google",
+  "defaultModel": "gemini-flash-latest",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "low",
   "enabledModels": [
-    "cursorapi/composer-2.5",
-    "opencode-go/kimi-k2.7-code",
     "google/gemini-flash-latest",
     "google/gemini-flash-lite-latest",
     "deepseek/deepseek-v4-flash",
@@ -34,8 +32,7 @@ DESIRED='{
     "npm:pi-agent-browser-native",
     "https://github.com/nicobailon/pi-boomerang",
     "npm:pi-commandcode-provider",
-    "https://github.com/devnazim/pi-cmux",
-    "npm:pi-opencode-bridge"
+    "https://github.com/devnazim/pi-cmux"
   ]
 }'
 

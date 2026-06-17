@@ -210,7 +210,6 @@ zellij d myproject               # Delete session
 | **pi-boomerang** | Reconnect and resume pi sessions after restart/crash |
 | **pi-commandcode-provider** | Connects Pi to the Command Code API (Claude, GPT, DeepSeek V4, Kimi, GLM, Qwen 3.6, and more) |
 | **pi-cmux** | Terminal multiplexer integration for pi |
-| **pi-opencode** | Access OpenCode Zen (pay-as-you-go) and OpenCode Go (subscription) models in pi — 40+ models including GPT, Claude, Gemini, and more |
 
 #### Pi MCP Servers
 
@@ -223,7 +222,6 @@ zellij d myproject               # Delete session
 | Provider | What it does |
 |----------|---------------|
 | **commandcode** | Premium and open-source models via the Command Code API — install `pi-commandcode-provider`, run `/login commandcode` or select from list |
-| **opencode-zen** / **opencode-go** | 40+ models via OpenCode (Zen pay-as-you-go or Go subscription) — install `pi-opencode`, set `OPENCODE_API_KEY`, then `/model opencode-zen/gpt-5.1` |
 
 #### Pi Extensions
 
