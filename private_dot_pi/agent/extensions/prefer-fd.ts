@@ -5,7 +5,7 @@
  * since fd is faster, respects .gitignore, and has simpler syntax.
  */
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function preferFd(pi: ExtensionAPI) {
   pi.on("before_agent_start", async (event) => {

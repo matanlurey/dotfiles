@@ -60,7 +60,7 @@ if command -v fnm &>/dev/null; then
 # Resolves the real cli.js path so pi can detect its own install location for self-update.
 eval "$(fnm env)" 2>/dev/null
 FNM_NODE_DIR="$(dirname "$(which node)")/.."
-PI_CLI="$FNM_NODE_DIR/lib/node_modules/@mariozechner/pi-coding-agent/dist/cli.js"
+PI_CLI="$FNM_NODE_DIR/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
 if [ -f "$PI_CLI" ]; then
     exec node "$PI_CLI" "$@"
 else

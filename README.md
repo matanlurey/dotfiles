@@ -134,7 +134,7 @@ Leader is `<Space>`. Press `<Space>` and pause to see all keybinds (which-key).
 - **Zellij** — Terminal multiplexer (Tokyo Night, session persistence, `dev`, `uw`, and `mbp` layouts)
 - **KeepingYouAwake** — Menu bar utility to prevent Mac from sleeping (wraps `caffeinate`)
 - **Superwhisper** — Local Whisper-based voice-to-text, works in terminals
-- **[pi](https://github.com/mariozechner/pi-coding-agent)** — Coding agent (settings, packages, and extensions managed)
+- **[pi](https://github.com/earendil-works/pi-coding-agent)** — Coding agent (settings, packages, and extensions managed)
 - **[Hunk](https://github.com/modem-dev/hunk)** — Review-first terminal diff viewer with live session daemon, agent annotations, and inline comments. Has a built-in pi skill: `hunk skill path`
 
 #### cmux Workspace Commands
