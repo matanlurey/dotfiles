@@ -7,15 +7,15 @@ set -euo pipefail
 CURRENT="$(cat)"
 
 DESIRED='{
-  "defaultProvider": "google",
-  "defaultModel": "gemini-flash-latest",
+  "defaultProvider": "commandcode",
+  "defaultModel": "deepseek/deepseek-v4-flash",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "low",
   "enabledModels": [
-    "google/gemini-flash-latest",
-    "google/gemini-flash-lite-latest",
-    "deepseek/deepseek-v4-flash",
-    "deepseek/deepseek-v4-pro"
+    "commandcode/deepseek/deepseek-v4-flash",
+    "commandcode/deepseek/deepseek-v4-pro",
+    "anthropic/sonnet-4-6",
+    "anthropic/opus-4-6"
   ],
   "packages": [
     "npm:pi-web-access",

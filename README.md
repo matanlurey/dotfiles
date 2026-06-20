@@ -223,7 +223,8 @@ zellij d myproject               # Delete session
 
 | Provider | What it does |
 |----------|---------------|
-| **commandcode** | Premium and open-source models via the Command Code API — install `pi-commandcode-provider`, run `/login commandcode` or select from list |
+| **commandcode** | DeepSeek V4 models via the Command Code API — install `pi-commandcode-provider`, run `/login commandcode` or select from list |
+| **anthropic** | Claude Sonnet 4.6, Opus 4.6 via Anthropic OAuth subscription — install `pi-anthropic-auth`, run `/login anthropic` |
 
 #### Pi Extensions
 
