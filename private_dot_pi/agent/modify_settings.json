@@ -33,7 +33,8 @@ DESIRED='{
     "https://github.com/nicobailon/pi-boomerang",
     "npm:pi-commandcode-provider",
     "https://github.com/devnazim/pi-cmux",
-    "npm:@gotgenes/pi-anthropic-auth"
+    "npm:@gotgenes/pi-anthropic-auth",
+    "npm:pi-lean-ctx"
   ]
 }'
 

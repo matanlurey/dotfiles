@@ -36,6 +36,9 @@ brew "yazi"
 brew "zellij"
 brew "zoxide"
 
+# AI / Context
+brew "yvgude/lean-ctx/lean-ctx"
+
 # Editors
 brew "neovim"
 cask "visual-studio-code"

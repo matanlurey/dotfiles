@@ -211,6 +211,7 @@ zellij d myproject               # Delete session
 | **pi-commandcode-provider** | Connects Pi to the Command Code API (Claude, GPT, DeepSeek V4, Kimi, GLM, Qwen 3.6, and more) |
 | **pi-cmux** | Terminal multiplexer integration for pi |
 | **pi-anthropic-auth** | Anthropic model provider with custom proxy/base URL support via `@gotgenes/pi-anthropic-auth` |
+| **pi-lean-ctx** | 60-90% token savings on file reads and shell output via lean-ctx compression and session cache (`ctx_read`, `ctx_shell`, etc.) |
 
 #### Pi MCP Servers
 
