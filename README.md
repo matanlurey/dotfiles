@@ -210,6 +210,7 @@ zellij d myproject               # Delete session
 | **pi-boomerang** | Reconnect and resume pi sessions after restart/crash |
 | **pi-commandcode-provider** | Connects Pi to the Command Code API (Claude, GPT, DeepSeek V4, Kimi, GLM, Qwen 3.6, and more) |
 | **pi-cmux** | Terminal multiplexer integration for pi |
+| **pi-anthropic-auth** | Anthropic model provider with custom proxy/base URL support via `@gotgenes/pi-anthropic-auth` |
 
 #### Pi MCP Servers
 

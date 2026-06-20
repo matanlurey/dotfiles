@@ -32,7 +32,8 @@ DESIRED='{
     "npm:pi-agent-browser-native",
     "https://github.com/nicobailon/pi-boomerang",
     "npm:pi-commandcode-provider",
-    "https://github.com/devnazim/pi-cmux"
+    "https://github.com/devnazim/pi-cmux",
+    "npm:@gotgenes/pi-anthropic-auth"
   ]
 }'
 
