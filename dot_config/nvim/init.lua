@@ -15,6 +15,24 @@ vim.opt.rtp:prepend(lazypath)
 vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
+-- TODO: Remove once neovim fixes assert(uv.cwd()) in vim.fs.abspath.
+-- vim.fs.abspath (added in 0.12) asserts on uv.cwd() and crashes when the
+-- working directory has been deleted (e.g. tmpdir cleaned up). Fall back to
+-- HOME so callers (vim.filetype.match, render-markdown, etc.) don't die.
+-- https://github.com/neovim/neovim/issues?q=abspath+cwd
+local orig_abspath = vim.fs.abspath
+vim.fs.abspath = function(path)
+  local ok, result = pcall(orig_abspath, path)
+  if ok then
+    return result
+  end
+  local home = vim.fn.expand("~")
+  if path:sub(1, 1) == "/" then
+    return path
+  end
+  return home .. "/" .. path
+end
+
 -- Line numbers
 vim.opt.number = true
 vim.opt.relativenumber = true
