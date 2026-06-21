@@ -245,7 +245,7 @@ zellij d myproject               # Delete session
 Managed packages:
 
 - `font-fira-code-nerd-font`
-- `agent-browser`, `bat` (with Tokyo Night theme), `duckdb`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `glow`, `go`, `hunk`, `jj`, `jq`, `k9s`, `lazyjj`, `playwright-cli`, `procs`, `ripgrep`, `starship`, `tokei`, `xan`, `xcodes`, `yazi`, `zellij`, `zoxide`
+- `agent-browser`, `ansible`, `bat` (with Tokyo Night theme), `duckdb`, `eza`, `fd`, `fzf`, `gh`, `git`, `git-delta`, `glow`, `go`, `hunk`, `jj`, `jq`, `k9s`, `lazyjj`, `playwright-cli`, `procs`, `ripgrep`, `starship`, `tokei`, `xan`, `xcodes`, `yazi`, `zellij`, `zoxide`
 - `jj-hooks` (runs pre-commit/pre-push hooks before jj pushes)
 - `mlux` (Typst-powered terminal markdown viewer; installed from GitHub releases)
 - `fnm`, `zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`

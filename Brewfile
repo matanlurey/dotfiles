@@ -10,6 +10,7 @@ brew "zsh-syntax-highlighting"
 
 # CLI Tools
 brew "agent-browser"
+brew "ansible"
 brew "bat"
 brew "modem-dev/tap/hunk"
 brew "xcodes"
