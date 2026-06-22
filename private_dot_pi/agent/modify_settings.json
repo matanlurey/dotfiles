@@ -14,8 +14,8 @@ DESIRED='{
   "enabledModels": [
     "commandcode/deepseek/deepseek-v4-flash",
     "commandcode/deepseek/deepseek-v4-pro",
-    "anthropic/sonnet-4-6",
-    "anthropic/opus-4-6"
+    "anthropic/claude-sonnet-4-6",
+    "anthropic/claude-opus-4-6"
   ],
   "packages": [
     "npm:pi-web-access",
