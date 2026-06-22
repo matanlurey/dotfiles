@@ -419,6 +419,17 @@ require("lazy").setup({
     opts = {},
   },
 
+  -- Live markdown preview in browser
+  {
+    "iamcco/markdown-preview.nvim",
+    build = "cd app && npx --yes yarn install",
+    cmd = { "MarkdownPreview", "MarkdownPreviewStop", "MarkdownPreviewToggle" },
+    ft = "markdown",
+    init = function()
+      vim.g.mkdp_filetypes = { "markdown" }
+    end,
+  },
+
   -- Keybind hints
   {
     "folke/which-key.nvim",
