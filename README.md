@@ -229,6 +229,7 @@ zellij d myproject               # Delete session
 
 | Extension | What it does |
 |-----------|--------------|
+| **guardrails.ts** | Hard-blocks bash commands that hang the session or violate policy: `find /`\|`~`\|`$HOME` (unbounded filesystem scans), `jj`/`git -i`/`--interactive` (opens an editor, hangs non-interactive sessions), and `jj squash` (never-squash policy) |
 | **prefer-fd.ts** | Nudges the agent to use `fd` instead of `find` for file searching |
 | **review.ts** | `/review` for local self-review (jj diff), `/review <PR>` for GitHub PRs — Conventional Comments format |
 | **tts.ts** | `/speak` reads last response aloud via macOS `say`; `/speak auto` toggles auto-speak |
