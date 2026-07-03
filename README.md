@@ -238,6 +238,7 @@ zellij d myproject               # Delete session
 | Skill | What it does |
 |-------|---------------|
 | **grill-me** | Conducts a rigorous technical interview on the current codebase using pi-interview |
+| **api-doc-comments** | Writes and de-slops high-quality documentation comments for public APIs (agnostic principles + TS/Python/Rust/Go references) |
 
 ### Brewfile
 
