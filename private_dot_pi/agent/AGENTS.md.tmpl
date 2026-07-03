@@ -5,7 +5,7 @@
 - If a repo has `.jj` (Jujutsu initialized), prefer `jj` over `git` for all write operations (commit, describe, push, bookmark, etc.).
 - Read operations (diff, log, status) can use either, but prefer `jj` for consistency.
 - Use `jj describe` instead of `git commit`, `jj new` instead of `git checkout -b`, `jj bookmark set` + `jj push` instead of `git push`, etc.
-- **Always use `jj push`** (not `jj git push`). The `jj push` alias runs pre-commit/pre-push hooks via `jj-hooks` before pushing. Skipping it bypasses repo linting and formatting checks.
+- Use `jj git push` to push changes.
 - For sub-agents that need isolated working copies, use `jj workspace add /tmp/workspace-name` instead of `git worktree`. Clean up with `jj workspace forget` and `rm -rf` the tmp directory when done.
 
 ### Commit discipline

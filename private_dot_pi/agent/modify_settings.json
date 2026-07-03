@@ -7,16 +7,29 @@ set -euo pipefail
 CURRENT="$(cat)"
 
 DESIRED='{
-  "defaultProvider": "commandcode",
-  "defaultModel": "deepseek/deepseek-v4-flash",
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-5",
   "hideThinkingBlock": false,
-  "defaultThinkingLevel": "low",
+  "defaultThinkingLevel": "medium",
   "enabledModels": [
     "commandcode/deepseek/deepseek-v4-flash",
     "commandcode/deepseek/deepseek-v4-pro",
-    "anthropic/claude-sonnet-4-6",
-    "anthropic/claude-opus-4-6"
+    "anthropic/claude-haiku-4-5-20251001",
+    "anthropic/claude-sonnet-5",
+    "anthropic/claude-opus-4-8"
   ],
+  "subagents": {
+    "agentOverrides": {
+      "scout": { "model": "anthropic/claude-haiku-4-5-20251001" },
+      "context-builder": { "model": "anthropic/claude-haiku-4-5-20251001" },
+      "researcher": { "model": "anthropic/claude-haiku-4-5-20251001" },
+      "delegate": { "model": "anthropic/claude-haiku-4-5-20251001" },
+      "planner": { "model": "anthropic/claude-sonnet-5", "thinking": "high" },
+      "worker": { "model": "anthropic/claude-sonnet-5", "thinking": "medium" },
+      "reviewer": { "model": "anthropic/claude-opus-4-8", "thinking": "high" },
+      "oracle": { "model": "anthropic/claude-opus-4-8", "thinking": "high" }
+    }
+  },
   "packages": [
     "npm:pi-web-access",
     "npm:pi-mcp-adapter",
@@ -33,7 +46,8 @@ DESIRED='{
     "https://github.com/nicobailon/pi-boomerang",
     "npm:pi-commandcode-provider",
     "https://github.com/devnazim/pi-cmux",
-    "npm:@gotgenes/pi-anthropic-auth"
+    "npm:@gotgenes/pi-anthropic-auth",
+    "npm:pi-prompt-template-model"
   ]
 }'
 
