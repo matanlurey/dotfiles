@@ -212,6 +212,7 @@ zellij d myproject               # Delete session
 | **pi-cmux** | Terminal multiplexer integration for pi |
 | **pi-anthropic-auth** | Anthropic model provider with custom proxy/base URL support via `@gotgenes/pi-anthropic-auth` |
 | **pi-tasks** | Claude Code-style task tracking and coordination — structured tasks, dependency management, persistent widget |
+| **pi-goal** | Session-scoped `/goal` mode — autonomous, verifiable task completion with guarded continuation turns |
 
 #### Pi MCP Servers
 
