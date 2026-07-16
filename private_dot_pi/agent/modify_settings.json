@@ -47,7 +47,8 @@ DESIRED='{
     "npm:pi-commandcode-provider",
     "https://github.com/devnazim/pi-cmux",
     "npm:@gotgenes/pi-anthropic-auth",
-    "npm:pi-prompt-template-model"
+    "npm:pi-prompt-template-model",
+    "https://github.com/tintinweb/pi-tasks"
   ]
 }'
 

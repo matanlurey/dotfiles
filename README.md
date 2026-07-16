@@ -211,6 +211,7 @@ zellij d myproject               # Delete session
 | **pi-commandcode-provider** | Connects Pi to the Command Code API (Claude, GPT, DeepSeek V4, Kimi, GLM, Qwen 3.6, and more) |
 | **pi-cmux** | Terminal multiplexer integration for pi |
 | **pi-anthropic-auth** | Anthropic model provider with custom proxy/base URL support via `@gotgenes/pi-anthropic-auth` |
+| **pi-tasks** | Claude Code-style task tracking and coordination — structured tasks, dependency management, persistent widget |
 
 #### Pi MCP Servers
 
@@ -230,7 +231,6 @@ zellij d myproject               # Delete session
 | Extension | What it does |
 |-----------|--------------|
 | **guardrails.ts** | Hard-blocks bash commands that hang the session or violate policy: `find /`\|`~`\|`$HOME` (unbounded filesystem scans), `jj`/`git -i`/`--interactive` (opens an editor, hangs non-interactive sessions), and `jj squash` (never-squash policy) |
-| **prefer-fd.ts** | Nudges the agent to use `fd` instead of `find` for file searching |
 | **review.ts** | `/review` for local self-review (jj diff), `/review <PR>` for GitHub PRs — Conventional Comments format |
 | **tts.ts** | `/speak` reads last response aloud via macOS `say`; `/speak auto` toggles auto-speak |
 
