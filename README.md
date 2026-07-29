@@ -241,6 +241,7 @@ zellij d myproject               # Delete session
 |-------|---------------|
 | **grill-me** | Conducts a rigorous technical interview on the current codebase using pi-interview |
 | **api-doc-comments** | Writes and de-slops high-quality documentation comments for public APIs (agnostic principles + TS/Python/Rust/Go references) |
+| **hunk-review** | Drives live Hunk diff-review sessions via CLI — inspects focus, navigates files/hunks, and adds inline review comments (bundled with `hunk`, copied via `hunk skill path`) |
 
 ### Brewfile
 
