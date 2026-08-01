@@ -1,0 +1,174 @@
+/**
+ * Per-issue state.
+ *
+ * The GitHub thread is the source of truth for content; these files are a cache
+ * plus a lock. Anything here can be rebuilt by re-reading the issue and PR,
+ * which is what recovery on a corrupt file does.
+ *
+ * Writes are atomic (write temp, rename) so a crash mid-write cannot leave a
+ * half-written record behind.
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import { STATE_DIR } from "./config.ts";
+
+/**
+ * Lifecycle of one issue. Terminal states are "done" and "abandoned".
+ *
+ * claimed -> planning -> implementing -> pr_open -> awaiting_review
+ *   awaiting_review -> responding -> awaiting_review   (review round trip)
+ *   awaiting_review -> ci_fixing   -> awaiting_review   (red pipeline)
+ *   any -> blocked   (needs a human answer)
+ *   any -> paused    (budget exhausted)
+ *   any -> done      (merged) | abandoned (label removed)
+ */
+export type Phase =
+  | "claimed"
+  | "planning"
+  | "implementing"
+  | "pr_open"
+  | "awaiting_review"
+  | "responding"
+  | "ci_fixing"
+  | "blocked"
+  | "paused"
+  | "done"
+  | "abandoned";
+
+export type IssueState = {
+  repo: string;
+  issue: number;
+  phase: Phase;
+  branch: string;
+  worktree: string | null;
+  prNumber: number | null;
+  /** pi session id, stable per issue so phases share one conversation. */
+  sessionId: string;
+  /** Comment ids already processed, so the worker never answers twice. */
+  handledCommentIds: number[];
+  handledReviewIds: number[];
+  handledReviewCommentIds: number[];
+  /** Head SHA whose CI result we already reacted to. */
+  lastCiSha: string | null;
+  ciAttempts: number;
+  reviewRounds: number;
+  usdSpent: number;
+  /** Why the issue is blocked or paused, surfaced in /gh-agent status. */
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function key(repo: string, issue: number): string {
+  return `${repo.replace("/", "__")}__${issue}`;
+}
+
+function statePath(repo: string, issue: number): string {
+  return path.join(STATE_DIR, `${key(repo, issue)}.json`);
+}
+
+export function readState(repo: string, issue: number): IssueState | undefined {
+  const p = statePath(repo, issue);
+  if (!fs.existsSync(p)) return undefined;
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf-8")) as IssueState;
+  } catch {
+    // Corrupt cache: drop it and let the caller rebuild from GitHub.
+    fs.rmSync(p, { force: true });
+    return undefined;
+  }
+}
+
+export function writeState(state: IssueState): void {
+  const p = statePath(state.repo, state.issue);
+  const tmp = `${p}.tmp`;
+  const next = { ...state, updatedAt: new Date().toISOString() };
+  fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmp, p);
+}
+
+export function allStates(): IssueState[] {
+  if (!fs.existsSync(STATE_DIR)) return [];
+  const out: IssueState[] = [];
+  for (const f of fs.readdirSync(STATE_DIR)) {
+    if (!f.endsWith(".json") || f.endsWith(".tmp")) continue;
+    try {
+      out.push(JSON.parse(fs.readFileSync(path.join(STATE_DIR, f), "utf-8")) as IssueState);
+    } catch {
+      // Skip unreadable records rather than failing the whole listing.
+    }
+  }
+  return out;
+}
+
+export function newState(repo: string, issue: number, branch: string): IssueState {
+  const now = new Date().toISOString();
+  return {
+    repo,
+    issue,
+    phase: "claimed",
+    branch,
+    worktree: null,
+    prNumber: null,
+    sessionId: `gh-agent-${key(repo, issue)}`,
+    handledCommentIds: [],
+    handledReviewIds: [],
+    handledReviewCommentIds: [],
+    lastCiSha: null,
+    ciAttempts: 0,
+    reviewRounds: 0,
+    usdSpent: 0,
+    note: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function isTerminal(phase: Phase): boolean {
+  return phase === "done" || phase === "abandoned";
+}
+
+/** Phases where the worker waits on a human and must not consume budget. */
+export function isIdle(phase: Phase): boolean {
+  return phase === "awaiting_review" || phase === "blocked" || phase === "paused";
+}
+
+export function archive(repo: string, issue: number): void {
+  const p = statePath(repo, issue);
+  if (!fs.existsSync(p)) return;
+  const dir = path.join(STATE_DIR, "archive");
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.renameSync(p, path.join(dir, `${key(repo, issue)}-${Date.now()}.json`));
+}
+
+/**
+ * Cooperative lock so only one worker runs an issue at a time. Locks store the
+ * owning pid; a lock whose process is gone is treated as stale and reclaimed.
+ */
+export function acquireLock(repo: string, issue: number): boolean {
+  const lock = path.join(STATE_DIR, `${key(repo, issue)}.lock`);
+  try {
+    fs.writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+    return true;
+  } catch {
+    try {
+      const pid = Number(fs.readFileSync(lock, "utf-8").trim());
+      // Signal 0 tests for existence without actually signalling.
+      process.kill(pid, 0);
+      return false;
+    } catch {
+      fs.rmSync(lock, { force: true });
+      try {
+        fs.writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+}
+
+export function releaseLock(repo: string, issue: number): void {
+  fs.rmSync(path.join(STATE_DIR, `${key(repo, issue)}.lock`), { force: true });
+}

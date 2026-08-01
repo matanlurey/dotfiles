@@ -1,0 +1,572 @@
+/**
+ * Per-issue worker: git isolation, headless pi runs, and the phase machine.
+ *
+ * Isolation model: one cached clone per repo, one git worktree per issue. Two
+ * issues in the same repo therefore never share a working tree or an index.
+ *
+ * The agent never runs git itself (see HOUSE_RULES). This module owns every
+ * mutation, which is what keeps "never push to the default branch" and "new
+ * commit per review round, never force-push" true by construction rather than
+ * by asking the model nicely.
+ */
+
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import type { Config } from "./config.ts";
+import { LOG_DIR, REPO_CACHE_DIR, WORKTREE_DIR } from "./config.ts";
+import type { GitHub } from "./github.ts";
+import {
+  ciFixPrompt,
+  implementPrompt,
+  parseVerdict,
+  planningPrompt,
+  questionAnswerPrompt,
+  reviewResponsePrompt,
+  stripVerdict,
+  type Verdict,
+} from "./prompts.ts";
+import { archive, type IssueState, writeState } from "./state.ts";
+
+/** Minimum self-reported confidence to advance out of each phase. */
+const THRESHOLD = { planning: 0.6, implementing: 0.5, responding: 0.5, ci_fixing: 0.5 };
+
+/** Wall-clock ceiling per phase. This is the hard budget; prompts state it too. */
+const PHASE_TIMEOUT_MS = 25 * 60 * 1000;
+
+export type Logger = (msg: string) => void;
+
+export type ExecResult = { code: number; stdout: string; stderr: string };
+
+export function exec(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
+): Promise<ExecResult> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, {
+      cwd: opts.cwd,
+      env: { ...process.env, ...opts.env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let timer: NodeJS.Timeout | undefined;
+    if (opts.timeoutMs) {
+      timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        stderr += `\n[killed after ${opts.timeoutMs}ms]`;
+      }, opts.timeoutMs);
+    }
+    child.stdout.on("data", (d) => {
+      stdout += String(d);
+    });
+    child.stderr.on("data", (d) => {
+      stderr += String(d);
+    });
+    child.on("close", (code) => {
+      if (timer) clearTimeout(timer);
+      resolve({ code: code ?? -1, stdout, stderr });
+    });
+    child.on("error", (e) => {
+      if (timer) clearTimeout(timer);
+      resolve({ code: -1, stdout, stderr: `${stderr}\n${e.message}` });
+    });
+  });
+}
+
+function repoCachePath(repo: string): string {
+  return path.join(REPO_CACHE_DIR, repo.replace("/", "__"));
+}
+
+/** Clone on first use, fetch afterwards. Remote carries a fresh App token. */
+async function ensureClone(repo: string, gh: GitHub, log: Logger): Promise<string> {
+  const dir = repoCachePath(repo);
+  const remote = await gh.authenticatedRemote(repo);
+
+  if (!fs.existsSync(path.join(dir, ".git"))) {
+    log(`cloning ${repo}`);
+    fs.mkdirSync(path.dirname(dir), { recursive: true });
+    const res = await exec("git", ["clone", "--quiet", remote, dir], {
+      timeoutMs: 10 * 60 * 1000,
+    });
+    if (res.code !== 0) throw new Error(`clone failed: ${res.stderr}`);
+  } else {
+    // The cached token in the remote URL expires hourly; always refresh it.
+    await exec("git", ["remote", "set-url", "origin", remote], { cwd: dir });
+    const res = await exec("git", ["fetch", "--quiet", "--prune", "origin"], {
+      cwd: dir,
+      timeoutMs: 5 * 60 * 1000,
+    });
+    if (res.code !== 0) log(`fetch warning: ${res.stderr}`);
+  }
+  return dir;
+}
+
+export async function ensureWorktree(
+  state: IssueState,
+  cfg: Config,
+  gh: GitHub,
+  log: Logger,
+): Promise<string> {
+  if (state.worktree && fs.existsSync(state.worktree)) return state.worktree;
+
+  const clone = await ensureClone(state.repo, gh, log);
+  const base = await gh.defaultBranch(state.repo);
+  const wt = path.join(WORKTREE_DIR, `${state.repo.replace("/", "__")}__${state.issue}`);
+
+  fs.rmSync(wt, { recursive: true, force: true });
+  await exec("git", ["worktree", "prune"], { cwd: clone });
+
+  // Reuse the branch if a previous run already pushed it, else branch from base.
+  const existing = await exec("git", ["rev-parse", "--verify", `origin/${state.branch}`], {
+    cwd: clone,
+  });
+  const args =
+    existing.code === 0
+      ? ["worktree", "add", "--force", wt, "-B", state.branch, `origin/${state.branch}`]
+      : ["worktree", "add", "--force", wt, "-b", state.branch, `origin/${base}`];
+
+  const res = await exec("git", args, { cwd: clone, timeoutMs: 120_000 });
+  if (res.code !== 0) throw new Error(`worktree add failed: ${res.stderr}`);
+
+  const id = await gh.gitIdentity();
+  await exec("git", ["config", "user.name", id.name], { cwd: wt });
+  await exec("git", ["config", "user.email", id.email], { cwd: wt });
+
+  state.worktree = wt;
+  writeState(state);
+  log(`worktree ready at ${wt} (branch ${state.branch}, base ${base})`);
+  return wt;
+}
+
+export function removeWorktree(state: IssueState, log: Logger): void {
+  if (!state.worktree) return;
+  const clone = repoCachePath(state.repo);
+  fs.rmSync(state.worktree, { recursive: true, force: true });
+  void exec("git", ["worktree", "prune"], { cwd: clone });
+  log(`cleaned worktree for ${state.repo}#${state.issue}`);
+}
+
+async function hasChanges(wt: string): Promise<boolean> {
+  const res = await exec("git", ["status", "--porcelain"], { cwd: wt });
+  return res.stdout.trim().length > 0;
+}
+
+async function commitAll(wt: string, message: string): Promise<boolean> {
+  if (!(await hasChanges(wt))) return false;
+  await exec("git", ["add", "-A"], { cwd: wt });
+  const res = await exec("git", ["commit", "-m", message], { cwd: wt });
+  return res.code === 0;
+}
+
+/**
+ * Push the issue branch. Force-push is never used: reviewers keep their
+ * "viewed" markers and inline comments stay anchored.
+ */
+async function push(state: IssueState, gh: GitHub, cfg: Config, log: Logger): Promise<void> {
+  if (cfg.dryRun) {
+    log(`[dry-run] would push ${state.branch}`);
+    return;
+  }
+  const wt = state.worktree as string;
+  const remote = await gh.authenticatedRemote(state.repo);
+  await exec("git", ["remote", "set-url", "origin", remote], { cwd: wt });
+  const res = await exec("git", ["push", "--set-upstream", "origin", state.branch], {
+    cwd: wt,
+    timeoutMs: 5 * 60 * 1000,
+  });
+  if (res.code !== 0) throw new Error(`push failed: ${res.stderr}`);
+}
+
+async function headSha(wt: string): Promise<string> {
+  const res = await exec("git", ["rev-parse", "HEAD"], { cwd: wt });
+  return res.stdout.trim();
+}
+
+export type RunResult = { verdict: Verdict; output: string; timedOut: boolean };
+
+/**
+ * Run one headless pi turn in the issue's worktree.
+ *
+ * The session id is stable per issue, so planning, implementation, review
+ * responses and CI fixes all share one conversation and the agent remembers
+ * its own earlier reasoning.
+ */
+export async function runPi(
+  prompt: string,
+  state: IssueState,
+  cfg: Config,
+  log: Logger,
+): Promise<RunResult> {
+  const wt = state.worktree as string;
+  const sessionDir = path.join(LOG_DIR, "sessions", `${state.repo.replace("/", "__")}__${state.issue}`);
+  fs.mkdirSync(sessionDir, { recursive: true });
+
+  const args = [
+    "-p",
+    prompt,
+    "--model",
+    cfg.model,
+    "--thinking",
+    cfg.thinking,
+    "--session-id",
+    state.sessionId,
+    "--session-dir",
+    sessionDir,
+    // Trust project-local AGENTS.md/CLAUDE.md so repo conventions are honored.
+    "-a",
+  ];
+
+  log(`running pi (${cfg.model}) in ${wt}`);
+  const started = Date.now();
+  const res = await exec("pi", args, {
+    cwd: wt,
+    timeoutMs: PHASE_TIMEOUT_MS,
+    // Keep nested agents out; this run is already the autonomous worker.
+    env: { PI_GH_AGENT: "1" },
+  });
+  const elapsed = Math.round((Date.now() - started) / 1000);
+  const timedOut = res.stderr.includes("[killed after");
+
+  const logFile = path.join(
+    LOG_DIR,
+    `${state.repo.replace("/", "__")}__${state.issue}-${Date.now()}.log`,
+  );
+  fs.writeFileSync(logFile, `$ pi ${args.join(" ")}\n\n${res.stdout}\n--- stderr ---\n${res.stderr}`);
+  log(`pi finished in ${elapsed}s (exit ${res.code}, log ${path.basename(logFile)})`);
+
+  if (timedOut) {
+    return {
+      timedOut: true,
+      output: res.stdout,
+      verdict: {
+        confidence: 0,
+        status: "failed",
+        question: null,
+        summary: `The run hit the ${Math.round(PHASE_TIMEOUT_MS / 60000)} minute phase budget and was stopped.`,
+      },
+    };
+  }
+
+  return { timedOut: false, output: res.stdout, verdict: parseVerdict(res.stdout) };
+}
+
+const SIG = "\n\n<sub>Posted automatically by the issue agent.</sub>";
+
+async function block(
+  state: IssueState,
+  gh: GitHub,
+  cfg: Config,
+  question: string,
+  log: Logger,
+): Promise<void> {
+  state.phase = "blocked";
+  state.note = question;
+  writeState(state);
+  if (cfg.dryRun) {
+    log(`[dry-run] would ask: ${question}`);
+    return;
+  }
+  await gh.comment(
+    state.repo,
+    state.issue,
+    `I need input before I can continue.\n\n${question}\n\nReply on this issue and I'll pick it back up.${SIG}`,
+  );
+  log(`blocked on question for ${state.repo}#${state.issue}`);
+}
+
+async function pause(
+  state: IssueState,
+  gh: GitHub,
+  cfg: Config,
+  reason: string,
+  log: Logger,
+): Promise<void> {
+  state.phase = "paused";
+  state.note = reason;
+  writeState(state);
+  if (!cfg.dryRun) {
+    await gh.comment(
+      state.repo,
+      state.issue,
+      `I've stopped working on this for now.\n\n${reason}\n\nRemove and re-add the \`${cfg.label}\` label to restart me.${SIG}`,
+    );
+  }
+  log(`paused ${state.repo}#${state.issue}: ${reason}`);
+}
+
+/**
+ * Drive one issue forward by a single phase. Returns when the issue is idle,
+ * terminal, or has consumed its step for this poll cycle.
+ */
+export async function step(
+  state: IssueState,
+  cfg: Config,
+  gh: GitHub,
+  log: Logger,
+): Promise<void> {
+  const issue = await gh.getIssue(state.repo, state.issue);
+
+  switch (state.phase) {
+    case "claimed": {
+      await ensureWorktree(state, cfg, gh, log);
+      if (!cfg.dryRun) {
+        await gh.comment(
+          state.repo,
+          state.issue,
+          `Picking this up. I'll plan it out and report back before writing code.${SIG}`,
+        );
+      }
+      state.phase = "planning";
+      writeState(state);
+      return;
+    }
+
+    case "planning": {
+      await ensureWorktree(state, cfg, gh, log);
+      const comments = await gh.issueComments(state.repo, state.issue);
+      const thread = comments
+        .map((c) => `**@${c.user.login}**: ${c.body}`)
+        .join("\n\n");
+      const { verdict } = await runPi(planningPrompt(issue, thread), state, cfg, log);
+
+      if (verdict.status === "needs_help" && verdict.question) {
+        await block(state, gh, cfg, verdict.question, log);
+        return;
+      }
+      if (verdict.status === "failed" || verdict.confidence < THRESHOLD.planning) {
+        await block(
+          state,
+          gh,
+          cfg,
+          `I couldn't produce a plan I trust (confidence ${verdict.confidence.toFixed(2)}).\n\n${verdict.summary}\n\nCould you clarify what you want here?`,
+          log,
+        );
+        return;
+      }
+
+      state.note = verdict.summary;
+      state.phase = "implementing";
+      writeState(state);
+      if (!cfg.dryRun) {
+        await gh.comment(
+          state.repo,
+          state.issue,
+          `Here's my plan:\n\n${verdict.summary}\n\nStarting work now.${SIG}`,
+        );
+      }
+      return;
+    }
+
+    case "implementing": {
+      const wt = await ensureWorktree(state, cfg, gh, log);
+      const plan = state.note ?? "(plan unavailable, re-derive from the issue)";
+      const { verdict } = await runPi(implementPrompt(issue, plan), state, cfg, log);
+
+      if (verdict.status === "needs_help" && verdict.question) {
+        await block(state, gh, cfg, verdict.question, log);
+        return;
+      }
+      if (verdict.status === "failed" || verdict.confidence < THRESHOLD.implementing) {
+        await block(
+          state,
+          gh,
+          cfg,
+          `I attempted the change but I'm not confident in it (confidence ${verdict.confidence.toFixed(2)}).\n\n${verdict.summary}\n\nHow would you like me to proceed?`,
+          log,
+        );
+        return;
+      }
+
+      const committed = await commitAll(wt, `${issue.title}\n\nCloses #${issue.number}`);
+      if (!committed) {
+        await block(
+          state,
+          gh,
+          cfg,
+          `The run reported success but left no changes in the working tree, so there's nothing to open a PR with.\n\n${verdict.summary}`,
+          log,
+        );
+        return;
+      }
+
+      await push(state, gh, cfg, log);
+      state.note = verdict.summary;
+      state.phase = "pr_open";
+      writeState(state);
+      return;
+    }
+
+    case "pr_open": {
+      if (cfg.dryRun) {
+        log(`[dry-run] would open PR for ${state.repo}#${state.issue}`);
+        state.phase = "awaiting_review";
+        writeState(state);
+        return;
+      }
+      const base = await gh.defaultBranch(state.repo);
+      const pr = await gh.createPr(state.repo, {
+        title: issue.title,
+        body: `Closes #${issue.number}\n\n${state.note ?? ""}\n\n---\n\nOpened autonomously from the \`${cfg.label}\` label. Review comments get a new commit in reply, never a force-push.`,
+        head: state.branch,
+        base,
+        draft: true,
+      });
+      state.prNumber = pr.number;
+      state.phase = "awaiting_review";
+      writeState(state);
+      await gh.comment(
+        state.repo,
+        state.issue,
+        `Opened ${pr.html_url} as a draft.${SIG}`,
+      );
+      log(`opened PR #${pr.number} for ${state.repo}#${state.issue}`);
+      return;
+    }
+
+    case "responding": {
+      const wt = await ensureWorktree(state, cfg, gh, log);
+      const prNumber = state.prNumber as number;
+      const reviews = (await gh.reviews(state.repo, prNumber)).filter(
+        (r) => !state.handledReviewIds.includes(r.id),
+      );
+      const comments = (await gh.reviewComments(state.repo, prNumber)).filter(
+        (c) => !state.handledReviewCommentIds.includes(c.id),
+      );
+
+      const { verdict } = await runPi(
+        reviewResponsePrompt(issue, reviews, comments),
+        state,
+        cfg,
+        log,
+      );
+
+      // Mark handled regardless of outcome so one bad round can't loop forever.
+      state.handledReviewIds.push(...reviews.map((r) => r.id));
+      state.handledReviewCommentIds.push(...comments.map((c) => c.id));
+      state.reviewRounds += 1;
+
+      if (verdict.status === "needs_help" && verdict.question) {
+        writeState(state);
+        await block(state, gh, cfg, verdict.question, log);
+        return;
+      }
+
+      const committed = await commitAll(
+        wt,
+        `Address review feedback\n\nRe: PR #${prNumber}`,
+      );
+      if (committed) await push(state, gh, cfg, log);
+
+      if (!cfg.dryRun) {
+        const reply = stripVerdict(verdict.summary) || verdict.summary;
+        await gh.comment(
+          state.repo,
+          prNumber,
+          `${reply}${committed ? "" : "\n\n(No code changes were needed for this round.)"}${SIG}`,
+        );
+      }
+
+      state.phase = "awaiting_review";
+      state.note = null;
+      writeState(state);
+      log(`answered review round ${state.reviewRounds} on PR #${prNumber}`);
+      return;
+    }
+
+    case "ci_fixing": {
+      const wt = await ensureWorktree(state, cfg, gh, log);
+      const prNumber = state.prNumber as number;
+      const pr = await gh.getPr(state.repo, prNumber);
+      const checks = await gh.checks(state.repo, pr.head.sha);
+
+      const logs = await failureLogs(state, checks, gh);
+      const { verdict } = await runPi(ciFixPrompt(issue, checks, logs), state, cfg, log);
+      state.ciAttempts += 1;
+
+      if (verdict.status === "needs_help" && verdict.question) {
+        writeState(state);
+        await block(state, gh, cfg, verdict.question, log);
+        return;
+      }
+
+      const committed = await commitAll(wt, `Fix CI\n\n${verdict.summary.slice(0, 200)}`);
+      if (committed) {
+        await push(state, gh, cfg, log);
+        state.lastCiSha = await headSha(wt);
+      }
+      state.phase = "awaiting_review";
+      writeState(state);
+      log(`CI fix attempt ${state.ciAttempts} pushed=${committed}`);
+      return;
+    }
+
+    default:
+      return;
+  }
+}
+
+/** Best-effort failing-job logs for the CI fix prompt. */
+async function failureLogs(
+  state: IssueState,
+  checks: { failing: { name: string; url: string }[] },
+  gh: GitHub,
+): Promise<string> {
+  const out: string[] = [];
+  for (const f of checks.failing.slice(0, 3)) {
+    const m = f.url.match(/\/runs\/(\d+)\/job\/(\d+)/) ?? f.url.match(/\/job\/(\d+)/);
+    if (!m) continue;
+    const jobId = m[m.length - 1];
+    try {
+      const token = await gh.token();
+      const res = await fetch(
+        `https://api.github.com/repos/${state.repo}/actions/jobs/${jobId}/logs`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "User-Agent": "matanlurey-agent-worker",
+          },
+          redirect: "follow",
+        },
+      );
+      if (res.ok) {
+        const text = await res.text();
+        // Tail is where the failure actually is; the head is setup noise.
+        out.push(`### ${f.name}\n${text.slice(-6000)}`);
+      }
+    } catch {
+      // Logs are a nice-to-have; the agent can still reproduce locally.
+    }
+  }
+  return out.join("\n\n");
+}
+
+export async function finish(
+  state: IssueState,
+  cfg: Config,
+  gh: GitHub,
+  reason: "merged" | "unlabelled",
+  log: Logger,
+): Promise<void> {
+  if (reason === "unlabelled" && state.prNumber && !cfg.dryRun) {
+    try {
+      await gh.closePr(state.repo, state.prNumber);
+      await gh.comment(
+        state.repo,
+        state.prNumber,
+        `Closing: the \`${cfg.label}\` label was removed from #${state.issue}.${SIG}`,
+      );
+      await gh.deleteBranch(state.repo, state.branch);
+    } catch (e) {
+      log(`cleanup warning: ${(e as Error).message}`);
+    }
+  }
+  removeWorktree(state, log);
+  state.phase = reason === "merged" ? "done" : "abandoned";
+  writeState(state);
+  archive(state.repo, state.issue);
+  log(`finished ${state.repo}#${state.issue} (${reason})`);
+}
+
+export { pause, THRESHOLD };
