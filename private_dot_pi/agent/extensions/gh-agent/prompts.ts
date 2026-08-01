@@ -20,6 +20,12 @@ export type Verdict = {
   question: string | null;
   /** Short human-readable summary, used in issue comments and PR bodies. */
   summary: string;
+  /**
+   * Proposed pull request title. The agent cannot touch GitHub itself, so this
+   * is how it asks for a title matching the repo's convention (many repos gate
+   * CI on a Conventional Commits PR title).
+   */
+  prTitle: string | null;
 };
 
 const VERDICT_CONTRACT = `
@@ -28,19 +34,21 @@ const VERDICT_CONTRACT = `
 End your final message with exactly this block, and nothing after it:
 
 ${VERDICT_START}
-{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "summary": "<one paragraph>"}
+{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "summary": "<one paragraph>"}
 ${VERDICT_END}
 
 Rules for the verdict:
 - confidence is your honest probability that this phase's work is correct and complete. Do not inflate it.
 - status "needs_help" means a human must answer something before you can proceed correctly. Set question to the exact question to post on the issue. Ask about intent, requirements, or tradeoffs. Never ask a question you can answer yourself by reading the repo.
 - status "failed" means you could not do the work at all. Explain why in summary.
+- prTitle proposes the pull request title. Check whether the repo enforces a title convention (a Conventional Commits CI check, CONTRIBUTING.md, or the style of recent merged PRs and CHANGELOG entries) and match it, including any breaking-change marker. Leave it null if you have no better title than the issue title.
 - Never fabricate progress. If you did not finish, say so.`;
 
 const HOUSE_RULES = `
 ## Operating rules
 
 - You are working autonomously on a GitHub issue. No human is watching this run.
+- You have no GitHub credentials, by design. \`gh\` will not work, and neither will pushing. Every GitHub action is performed for you by the harness, as a bot user. To influence a pull request, use your verdict (summary becomes the PR body, prTitle becomes its title).
 - Follow the repository's own conventions. Read AGENTS.md / CLAUDE.md / CONTRIBUTING.md if present and obey them.
 - Match the surrounding code style. Do not reformat unrelated code.
 - Do not touch CI config, release tooling, dependency pins, or secrets unless the issue explicitly asks.
@@ -181,6 +189,7 @@ export function parseVerdict(output: string): Verdict {
       confidence: 0,
       status: "failed",
       question: null,
+      prTitle: null,
       summary: "The run produced no verdict block, so its result cannot be trusted.",
     };
   }
@@ -192,6 +201,11 @@ export function parseVerdict(output: string): Verdict {
       confidence: Math.max(0, Math.min(1, confidence)),
       status: parsed.status === "ok" || parsed.status === "needs_help" ? parsed.status : "failed",
       question: typeof parsed.question === "string" ? parsed.question : null,
+      // Titles land in a PR, so cap the length and drop newlines.
+      prTitle:
+        typeof parsed.prTitle === "string" && parsed.prTitle.trim()
+          ? parsed.prTitle.replace(/\s+/g, " ").trim().slice(0, 120)
+          : null,
       summary: typeof parsed.summary === "string" ? parsed.summary : "(no summary)",
     };
   } catch {
@@ -199,6 +213,7 @@ export function parseVerdict(output: string): Verdict {
       confidence: 0,
       status: "failed",
       question: null,
+      prTitle: null,
       summary: "The verdict block was not valid JSON.",
     };
   }

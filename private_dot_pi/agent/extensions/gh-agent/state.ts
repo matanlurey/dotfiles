@@ -43,6 +43,8 @@ export type IssueState = {
   branch: string;
   worktree: string | null;
   prNumber: number | null;
+  /** Title proposed by the agent, matching the repo's PR title convention. */
+  prTitle: string | null;
   /** pi session id, stable per issue so phases share one conversation. */
   sessionId: string;
   /**
@@ -89,6 +91,7 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     // key must become the documented default rather than leaking undefined.
     statusCommentId: raw.statusCommentId ?? null,
     prNumber: raw.prNumber ?? null,
+    prTitle: raw.prTitle ?? null,
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
     note: raw.note ?? null,
@@ -149,6 +152,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     branch,
     worktree: null,
     prNumber: null,
+    prTitle: null,
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,
     handledCommentIds: [],

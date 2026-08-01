@@ -522,6 +522,14 @@ export class GitHub {
     return this.request<PullRequest>(`/repos/${repo}/pulls/${number}`);
   }
 
+  async updatePrTitle(repo: string, number: number, title: string): Promise<void> {
+    if (this.#cfg.dryRun) return;
+    await this.request(`/repos/${repo}/pulls/${number}`, {
+      method: "PATCH",
+      body: { title },
+    });
+  }
+
   async closePr(repo: string, number: number): Promise<void> {
     await this.request(`/repos/${repo}/pulls/${number}`, {
       method: "PATCH",

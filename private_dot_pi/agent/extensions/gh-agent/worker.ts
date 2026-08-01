@@ -418,6 +418,28 @@ export async function runPi(
     "-a",
   ];
 
+  // Strip the human's GitHub credentials from the child environment.
+  //
+  // The agent has bash, and an inherited `gh` login would let it act as the
+  // repo owner: renaming PRs, merging, deleting branches. That bypasses the
+  // App's permission scope, the repo allowlist, and the no-auto-merge rule,
+  // and misattributes the action to a human. The harness owns every GitHub
+  // mutation, so the child gets no usable credential.
+  const blindDir = path.join(sessionDir, "no-credentials");
+  fs.mkdirSync(blindDir, { recursive: true });
+  const sanitizedEnv: NodeJS.ProcessEnv = {
+    PI_GH_AGENT: "1",
+    GH_TOKEN: "",
+    GITHUB_TOKEN: "",
+    GH_ENTERPRISE_TOKEN: "",
+    GH_CONFIG_DIR: blindDir,
+    // Neutralize credential helpers and any push-rewriting url.insteadOf rules.
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_ASKPASS: "/usr/bin/false",
+  };
+
   // Stream to the log as output arrives so `tail -f` works during the run,
   // rather than the file appearing only after the phase ends.
   const logFile = path.join(
@@ -451,8 +473,7 @@ export async function runPi(
     res = await exec("pi", args, {
       cwd: wt,
       timeoutMs: PHASE_TIMEOUT_MS,
-      // Keep nested agents out; this run is already the autonomous worker.
-      env: { PI_GH_AGENT: "1" },
+      env: sanitizedEnv,
       onData: (chunk) => sink.write(chunk),
     });
   } finally {
@@ -472,6 +493,7 @@ export async function runPi(
         confidence: 0,
         status: "failed",
         question: null,
+        prTitle: null,
         summary: `The run hit the ${Math.round(PHASE_TIMEOUT_MS / 60000)} minute phase budget and was stopped.`,
       },
     };
@@ -722,6 +744,13 @@ export async function step(
         return;
       }
 
+      // Remember a proposed title so pr_open can use it. Many repos gate CI on
+      // a Conventional Commits PR title, which the raw issue title rarely is.
+      if (verdict.prTitle) {
+        state.prTitle = verdict.prTitle;
+        writeState(state);
+      }
+
       const committed = await commitAll(wt, `${issue.title}\n\nCloses #${issue.number}`);
       if (!committed) {
         await block(
@@ -754,11 +783,11 @@ export async function step(
       await push(state, gh, cfg, log);
       const base = await gh.defaultBranch(state.repo);
       const pr = await gh.createPr(state.repo, {
-        title: issue.title,
+        title: state.prTitle ?? issue.title,
         body: `Closes #${issue.number}\n\n${state.note ?? ""}\n\n---\n\nOpened autonomously from the \`${cfg.label}\` label. Review comments get a new commit in reply, never a force-push.`,
         head: state.branch,
         base,
-        draft: true,
+        draft: cfg.openPrAsDraft,
       });
       state.prNumber = pr.number;
       state.phase = "awaiting_review";
@@ -766,7 +795,9 @@ export async function step(
       await gh.comment(
         state.repo,
         state.issue,
-        `Opened ${pr.html_url} as a draft.${SIG}`,
+        cfg.openPrAsDraft
+          ? `Opened ${pr.html_url} as a draft. I'll mark it ready for review once checks pass.${SIG}`
+          : `Opened ${pr.html_url}.${SIG}`,
       );
       await publishStatus(state, cfg, gh, log);
       log(`opened PR #${pr.number} for ${state.repo}#${state.issue}`);
@@ -842,6 +873,19 @@ export async function step(
       const logs = await failureLogs(state, checks, gh);
       const { verdict } = await runPi(ciFixPrompt(issue, checks, logs), state, cfg, gh, log);
       state.ciAttempts += 1;
+
+      // A red "validate PR title" style check is fixed by retitling, which only
+      // the harness can do.
+      if (verdict.prTitle && verdict.prTitle !== state.prTitle && state.prNumber) {
+        state.prTitle = verdict.prTitle;
+        writeState(state);
+        try {
+          await gh.updatePrTitle(state.repo, state.prNumber, verdict.prTitle);
+          log(`retitled PR #${state.prNumber}: ${verdict.prTitle}`);
+        } catch (e) {
+          log(`retitle failed: ${(e as Error).message}`);
+        }
+      }
 
       if (verdict.status === "needs_help" && verdict.question) {
         writeState(state);

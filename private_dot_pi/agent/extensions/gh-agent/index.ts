@@ -72,9 +72,61 @@ function summarize(states: IssueState[]): string[] {
   });
 }
 
+/**
+ * Commands a worker run must never execute.
+ *
+ * Credentials are already stripped from the child environment, but a blocked
+ * tool call fails loudly with an explanation instead of failing obscurely deep
+ * inside a shell pipeline, and it covers anything the agent might find that
+ * still holds a token.
+ */
+function forbiddenForWorker(command: string): string | undefined {
+  const parts = command
+    .split(/&&|\|\||;|\|/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+
+  for (const cmd of parts) {
+    if (/^(sudo\s+)?gh\b/.test(cmd)) {
+      return (
+        "The `gh` CLI is not available to you. Every GitHub action (opening or " +
+        "retitling a PR, commenting, merging, labelling) is performed by the " +
+        "harness as the app's bot user, not by you as the repo owner. " +
+        "If a GitHub-side change is needed, describe it in your verdict " +
+        "summary, or set prTitle for a pull request title, and the harness " +
+        "will apply it."
+      );
+    }
+    if (/^(sudo\s+)?git\s+(push|commit|merge|rebase|reset|tag|remote)\b/.test(cmd)) {
+      return (
+        "The harness owns all git mutations. Leave your work uncommitted in the " +
+        "working tree; it is committed and pushed for you, as a new commit so " +
+        "reviewers keep their context. Read-only git (status, diff, log, show) " +
+        "is fine."
+      );
+    }
+    if (/^(sudo\s+)?jj\s+(git|push|describe|commit|new|squash|abandon|edit)\b/.test(cmd)) {
+      return (
+        "This is a plain git worktree with no jj workspace, and the harness " +
+        "owns all version control mutations anyway. Just edit files."
+      );
+    }
+  }
+  return undefined;
+}
+
 export default function ghAgent(pi: ExtensionAPI) {
-  // A worker's own nested pi run must not spawn another watcher.
-  if (process.env.PI_GH_AGENT === "1") return;
+  // Inside a worker run: install guardrails only, never the control surface.
+  if (process.env.PI_GH_AGENT === "1") {
+    pi.on("tool_call", async (event) => {
+      if (event.toolName !== "bash") return;
+      const command = (event.input as { command?: string }).command;
+      if (!command) return;
+      const reason = forbiddenForWorker(command);
+      if (reason) return { block: true, reason };
+    });
+    return;
+  }
 
   function refreshStatus(ctx: { ui: { setStatus(k: string, v: string | undefined): void } }) {
     const pid = daemonPid();

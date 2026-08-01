@@ -52,6 +52,15 @@ export type Config = {
   dryRun: boolean;
   /** Branch prefix for bot PRs. Never push to a default branch. */
   branchPrefix: string;
+  /**
+   * Open pull requests as drafts.
+   *
+   * A draft doesn't request review, so nobody is pinged for a change that may
+   * not even build. When checks go green the PR is promoted to ready
+   * automatically. Set false if you'd rather see it in the review queue
+   * immediately.
+   */
+  openPrAsDraft: boolean;
 };
 
 export const ROOT = path.join(os.homedir(), ".pi", "agent", "gh-agent-worker");
@@ -79,6 +88,7 @@ const DEFAULTS: Omit<Config, "apps"> = {
   },
   dryRun: false,
   branchPrefix: "agent/",
+  openPrAsDraft: true,
 };
 
 export function ensureDirs(): void {
