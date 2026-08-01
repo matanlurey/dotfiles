@@ -79,28 +79,66 @@ function repoCachePath(repo: string): string {
   return path.join(REPO_CACHE_DIR, repo.replace("/", "__"));
 }
 
-/** Clone on first use, fetch afterwards. Remote carries a fresh App token. */
+/**
+ * Feed the installation token to git without persisting it.
+ *
+ * Putting the token in the remote URL writes it into .git/config in plaintext,
+ * where it outlives the operation. Putting it in argv exposes it to `ps`. A
+ * credential helper that reads an env var avoids both: the value lives only in
+ * the child process's environment for the duration of the command.
+ *
+ * The empty first helper clears any inherited system helper (osxkeychain),
+ * which would otherwise answer first.
+ */
+const CRED_ARGS = [
+  "-c",
+  "credential.helper=",
+  "-c",
+  'credential.helper=!f() { echo username=x-access-token; echo "password=$GH_AGENT_TOKEN"; }; f',
+];
+
+async function gitAuthed(
+  repo: string,
+  gh: GitHub,
+  args: string[],
+  opts: { cwd?: string; timeoutMs?: number } = {},
+): Promise<ExecResult> {
+  const token = await gh.token(repo);
+  return exec("git", [...CRED_ARGS, ...args], {
+    ...opts,
+    env: { GH_AGENT_TOKEN: token },
+  });
+}
+
+/** Clone on first use, fetch afterwards. */
 async function ensureClone(repo: string, gh: GitHub, log: Logger): Promise<string> {
   const dir = repoCachePath(repo);
-  const remote = await gh.authenticatedRemote(repo);
+  const remote = gh.remoteUrl(repo);
 
   if (!fs.existsSync(path.join(dir, ".git"))) {
     log(`cloning ${repo}`);
     fs.mkdirSync(path.dirname(dir), { recursive: true });
-    const res = await exec("git", ["clone", "--quiet", remote, dir], {
+    const res = await gitAuthed(repo, gh, ["clone", "--quiet", remote, dir], {
       timeoutMs: 10 * 60 * 1000,
     });
-    if (res.code !== 0) throw new Error(`clone failed: ${res.stderr}`);
+    if (res.code !== 0) throw new Error(`clone failed: ${scrub(res.stderr)}`);
   } else {
-    // The cached token in the remote URL expires hourly; always refresh it.
+    // Repair a remote left over from an older build that embedded a token.
     await exec("git", ["remote", "set-url", "origin", remote], { cwd: dir });
-    const res = await exec("git", ["fetch", "--quiet", "--prune", "origin"], {
+    const res = await gitAuthed(repo, gh, ["fetch", "--quiet", "--prune", "origin"], {
       cwd: dir,
       timeoutMs: 5 * 60 * 1000,
     });
-    if (res.code !== 0) log(`fetch warning: ${res.stderr}`);
+    if (res.code !== 0) log(`fetch warning: ${scrub(res.stderr)}`);
   }
   return dir;
+}
+
+/** Redact anything token-shaped before it reaches a log or an exception. */
+export function scrub(text: string): string {
+  return text
+    .replace(/gh[posur]_[A-Za-z0-9]{10,}/g, "***")
+    .replace(/x-access-token:[^@\s]+/g, "x-access-token:***");
 }
 
 export async function ensureWorktree(
@@ -170,13 +208,15 @@ async function push(state: IssueState, gh: GitHub, cfg: Config, log: Logger): Pr
     return;
   }
   const wt = state.worktree as string;
-  const remote = await gh.authenticatedRemote(state.repo);
-  await exec("git", ["remote", "set-url", "origin", remote], { cwd: wt });
-  const res = await exec("git", ["push", "--set-upstream", "origin", state.branch], {
-    cwd: wt,
-    timeoutMs: 5 * 60 * 1000,
-  });
-  if (res.code !== 0) throw new Error(`push failed: ${res.stderr}`);
+  // "origin" resolves to the plain URL in the shared clone config; the helper
+  // supplies credentials without persisting them.
+  const res = await gitAuthed(
+    state.repo,
+    gh,
+    ["push", "--set-upstream", "origin", state.branch],
+    { cwd: wt, timeoutMs: 5 * 60 * 1000 },
+  );
+  if (res.code !== 0) throw new Error(`push failed: ${scrub(res.stderr)}`);
 }
 
 async function headSha(wt: string): Promise<string> {

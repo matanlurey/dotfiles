@@ -578,9 +578,13 @@ export class GitHub {
     return { conclusion: "success", failing: [], total };
   }
 
-  /** Clone URL carrying the installation token so git can push as the App. */
-  async authenticatedRemote(repo: string): Promise<string> {
-    const token = await this.token(repo);
-    return `https://x-access-token:${token}@github.com/${repo}.git`;
+  /**
+   * Plain clone URL, with no credentials in it.
+   *
+   * The token is supplied to git through a credential helper reading an env
+   * var (see worker.ts), so it never lands in .git/config or in argv.
+   */
+  remoteUrl(repo: string): string {
+    return `https://github.com/${repo}.git`;
   }
 }
