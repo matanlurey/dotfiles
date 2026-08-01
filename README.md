@@ -234,6 +234,7 @@ zellij d myproject               # Delete session
 | **guardrails.ts** | Hard-blocks bash commands that hang the session or violate policy: `find /`\|`~`\|`$HOME` (unbounded filesystem scans), `jj`/`git -i`/`--interactive` (opens an editor, hangs non-interactive sessions), and `jj squash` (never-squash policy) |
 | **review.ts** | `/review` for local self-review (jj diff), `/review <PR>` for GitHub PRs — Conventional Comments format |
 | **tts.ts** | `/speak` reads last response aloud via macOS `say`; `/speak auto` toggles auto-speak |
+| **gh-agent/** | `/gh-agent` — autonomous GitHub issue worker. Watches a label, works issues in isolated worktrees, opens draft PRs, answers reviews with new commits, fixes red CI, stands down on merge or label removal. Runs as a detached daemon. See [its README](private_dot_pi/agent/extensions/gh-agent/README.md) |
 
 #### Pi Skills
 
