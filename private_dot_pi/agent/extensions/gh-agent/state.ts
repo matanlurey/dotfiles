@@ -45,6 +45,11 @@ export type IssueState = {
   prNumber: number | null;
   /** pi session id, stable per issue so phases share one conversation. */
   sessionId: string;
+  /**
+   * The agent's single live status comment, edited in place.
+   * Cached so periodic progress updates cost one PATCH, not a comment listing.
+   */
+  statusCommentId: number | null;
   /** Comment ids already processed, so the worker never answers twice. */
   handledCommentIds: number[];
   handledReviewIds: number[];
@@ -112,6 +117,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     worktree: null,
     prNumber: null,
     sessionId: `gh-agent-${key(repo, issue)}`,
+    statusCommentId: null,
     handledCommentIds: [],
     handledReviewIds: [],
     handledReviewCommentIds: [],
@@ -146,10 +152,14 @@ export function archive(repo: string, issue: number): void {
  * Cooperative lock so only one worker runs an issue at a time. Locks store the
  * owning pid; a lock whose process is gone is treated as stale and reclaimed.
  */
+/** Locks held by this process, so a signal handler can release them. */
+const held = new Set<string>();
+
 export function acquireLock(repo: string, issue: number): boolean {
   const lock = path.join(STATE_DIR, `${key(repo, issue)}.lock`);
   try {
     fs.writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+    held.add(lock);
     return true;
   } catch {
     try {
@@ -161,6 +171,7 @@ export function acquireLock(repo: string, issue: number): boolean {
       fs.rmSync(lock, { force: true });
       try {
         fs.writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+        held.add(lock);
         return true;
       } catch {
         return false;
@@ -170,5 +181,13 @@ export function acquireLock(repo: string, issue: number): boolean {
 }
 
 export function releaseLock(repo: string, issue: number): void {
-  fs.rmSync(path.join(STATE_DIR, `${key(repo, issue)}.lock`), { force: true });
+  const lock = path.join(STATE_DIR, `${key(repo, issue)}.lock`);
+  fs.rmSync(lock, { force: true });
+  held.delete(lock);
+}
+
+/** Drop every lock this process holds. For signal handlers. */
+export function releaseAllLocks(): void {
+  for (const lock of held) fs.rmSync(lock, { force: true });
+  held.clear();
 }

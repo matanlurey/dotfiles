@@ -450,6 +450,59 @@ export class GitHub {
     });
   }
 
+  async updateComment(repo: string, commentId: number, body: string): Promise<void> {
+    if (this.#cfg.dryRun) return;
+    await this.request(`/repos/${repo}/issues/comments/${commentId}`, {
+      method: "PATCH",
+      body: { body },
+    });
+  }
+
+  /** Create a label if it doesn't exist. Safe to call repeatedly. */
+  async ensureLabel(
+    repo: string,
+    name: string,
+    color: string,
+    description: string,
+  ): Promise<void> {
+    if (this.#cfg.dryRun) return;
+    try {
+      await this.request(`/repos/${repo}/labels/${encodeURIComponent(name)}`);
+    } catch (e) {
+      if (!(e instanceof GitHubError && e.status === 404)) throw e;
+      try {
+        await this.request(`/repos/${repo}/labels`, {
+          method: "POST",
+          body: { name, color, description },
+        });
+      } catch (inner) {
+        // A concurrent worker may have created it between our check and post.
+        if (!(inner instanceof GitHubError && inner.status === 422)) throw inner;
+      }
+    }
+  }
+
+  async addLabels(repo: string, issue: number, labels: string[]): Promise<void> {
+    if (this.#cfg.dryRun || labels.length === 0) return;
+    await this.request(`/repos/${repo}/issues/${issue}/labels`, {
+      method: "POST",
+      body: { labels },
+    });
+  }
+
+  async removeLabel(repo: string, issue: number, label: string): Promise<void> {
+    if (this.#cfg.dryRun) return;
+    try {
+      await this.request(
+        `/repos/${repo}/issues/${issue}/labels/${encodeURIComponent(label)}`,
+        { method: "DELETE" },
+      );
+    } catch (e) {
+      // Not present is the desired end state anyway.
+      if (!(e instanceof GitHubError && e.status === 404)) throw e;
+    }
+  }
+
   async defaultBranch(repo: string): Promise<string> {
     const r = await this.request<{ default_branch: string }>(`/repos/${repo}`);
     return r.default_branch;

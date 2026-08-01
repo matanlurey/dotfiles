@@ -22,10 +22,11 @@ import {
   type IssueState,
   newState,
   readState,
+  releaseAllLocks,
   releaseLock,
   writeState,
 } from "./state.ts";
-import { finish, pause, step } from "./worker.ts";
+import { finish, killChildren, pause, publishStatus, step } from "./worker.ts";
 
 function log(msg: string): void {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -129,6 +130,13 @@ async function reconcile(
     state.phase = state.prNumber === null ? "planning" : "responding";
     state.note = null;
     writeState(state);
+    await publishStatus(
+      state,
+      cfg,
+      gh,
+      log,
+      `Thanks, picking this back up after ${fresh.length} new comment(s).`,
+    );
     log(`${state.repo}#${state.issue} unblocked by ${fresh.length} new comment(s)`);
     return true;
   }
@@ -278,15 +286,22 @@ async function main(): Promise<void> {
   const cfg = loadConfig();
   const gh = new GitHub(cfg);
 
-  if (!once) {
-    fs.writeFileSync(DAEMON_PID_FILE, String(process.pid));
-    const cleanup = () => {
-      fs.rmSync(DAEMON_PID_FILE, { force: true });
-      process.exit(0);
-    };
-    process.on("SIGTERM", cleanup);
-    process.on("SIGINT", cleanup);
-  }
+  if (!once) fs.writeFileSync(DAEMON_PID_FILE, String(process.pid));
+
+  // Applies to --once too: an interrupted run must not leave a locked issue or
+  // an unsupervised pi process behind.
+  let shuttingDown = false;
+  const cleanup = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    log(`got ${signal}, stopping child runs and releasing locks`);
+    killChildren();
+    releaseAllLocks();
+    if (!once) fs.rmSync(DAEMON_PID_FILE, { force: true });
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => cleanup("SIGTERM"));
+  process.on("SIGINT", () => cleanup("SIGINT"));
 
   const slugs = await gh.botLogins();
   log(
@@ -306,6 +321,8 @@ async function main(): Promise<void> {
 
 main().catch((e) => {
   log(`fatal: ${e.message}`);
+  killChildren();
+  releaseAllLocks();
   fs.rmSync(DAEMON_PID_FILE, { force: true });
   process.exit(1);
 });
