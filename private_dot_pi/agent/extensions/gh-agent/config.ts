@@ -21,9 +21,20 @@ export type Budget = {
   maxUsdPerIssue: number;
 };
 
-export type Config = {
+/**
+ * One GitHub App's credentials.
+ *
+ * A private App can only be installed on the account that owns it, so covering
+ * both a personal account and an org means one App per account.
+ */
+export type AppCred = {
   appId: string;
   privateKeyPath: string;
+};
+
+export type Config = {
+  /** Normalized from either "apps" or a top-level appId/privateKeyPath pair. */
+  apps: AppCred[];
   /** Issue label that opts an issue into autonomous work. */
   label: string;
   pollIntervalSeconds: number;
@@ -53,8 +64,7 @@ export const DAEMON_PID_FILE = path.join(ROOT, "daemon.pid");
 export const DAEMON_LOG = path.join(LOG_DIR, "daemon.log");
 export const TOKEN_CACHE = path.join(ROOT, "token-cache.json");
 
-const DEFAULTS: Omit<Config, "appId"> = {
-  privateKeyPath: path.join(ROOT, "private-key.pem"),
+const DEFAULTS: Omit<Config, "apps"> = {
   label: "good for agent",
   pollIntervalSeconds: 60,
   maxConcurrentIssues: 3,
@@ -90,40 +100,61 @@ export function loadConfig(): Config {
     );
   }
 
-  let raw: Partial<Config>;
+  type RawConfig = Partial<Config> & { appId?: string; privateKeyPath?: string };
+  let raw: RawConfig;
   try {
-    raw = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8")) as Partial<Config>;
+    raw = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8")) as RawConfig;
   } catch (e) {
     throw new ConfigError(`Config at ${CONFIG_PATH} is not valid JSON: ${(e as Error).message}`);
   }
 
-  if (!raw.appId) {
+  // Accept either the multi-App "apps" array or a single top-level pair.
+  const rawApps: AppCred[] = raw.apps?.length
+    ? raw.apps
+    : raw.appId
+      ? [
+          {
+            appId: raw.appId,
+            privateKeyPath: raw.privateKeyPath ?? path.join(ROOT, "private-key.pem"),
+          },
+        ]
+      : [];
+
+  if (rawApps.length === 0) {
     throw new ConfigError(
-      `Config is missing "appId". Find it at https://github.com/settings/apps/matanlurey-agent (App ID, near the top).`,
+      `Config declares no GitHub App. Add an "apps": [{ "appId": "...", "privateKeyPath": "..." }] entry. The App ID is near the top of the App's settings page.`,
     );
+  }
+
+  const apps = rawApps.map((a, i) => {
+    if (!a.appId) throw new ConfigError(`apps[${i}] is missing "appId".`);
+    const keyPath = expandHome(a.privateKeyPath ?? path.join(ROOT, "private-key.pem"));
+    if (!fs.existsSync(keyPath)) {
+      throw new ConfigError(
+        `Private key for app ${a.appId} not found at ${keyPath}. Generate one on the App settings page and save it there (chmod 600).`,
+      );
+    }
+    // A private key readable by other users is a credential leak; refuse to run.
+    if ((fs.statSync(keyPath).mode & 0o077) !== 0) {
+      throw new ConfigError(
+        `Private key at ${keyPath} is group/world readable. Run: chmod 600 ${keyPath}`,
+      );
+    }
+    return { appId: String(a.appId), privateKeyPath: keyPath };
+  });
+
+  const seen = new Set<string>();
+  for (const a of apps) {
+    if (seen.has(a.appId)) throw new ConfigError(`Duplicate appId ${a.appId} in "apps".`);
+    seen.add(a.appId);
   }
 
   const cfg: Config = {
     ...DEFAULTS,
     ...raw,
-    appId: String(raw.appId),
+    apps,
     budget: { ...DEFAULTS.budget, ...(raw.budget ?? {}) },
-    privateKeyPath: expandHome(raw.privateKeyPath ?? DEFAULTS.privateKeyPath),
   };
-
-  if (!fs.existsSync(cfg.privateKeyPath)) {
-    throw new ConfigError(
-      `Private key not found at ${cfg.privateKeyPath}. Generate one on the App settings page and save it there (chmod 600).`,
-    );
-  }
-
-  // A private key readable by other users is a credential leak; refuse to run.
-  const mode = fs.statSync(cfg.privateKeyPath).mode & 0o077;
-  if (mode !== 0) {
-    throw new ConfigError(
-      `Private key at ${cfg.privateKeyPath} is group/world readable. Run: chmod 600 ${cfg.privateKeyPath}`,
-    );
-  }
 
   if (cfg.maxConcurrentIssues < 1) {
     throw new ConfigError(`maxConcurrentIssues must be >= 1, got ${cfg.maxConcurrentIssues}`);
@@ -137,7 +168,7 @@ export function loadConfig(): Config {
   return cfg;
 }
 
-export function writeConfig(partial: Partial<Config> & { appId: string }): Config {
+export function writeConfig(partial: Partial<Config> & { apps: AppCred[] }): Config {
   ensureDirs();
   const merged = { ...DEFAULTS, ...partial };
   fs.writeFileSync(CONFIG_PATH, `${JSON.stringify(merged, null, 2)}\n`, { mode: 0o600 });

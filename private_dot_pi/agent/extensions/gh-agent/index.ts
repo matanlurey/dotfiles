@@ -28,6 +28,7 @@ import {
   ROOT,
   writeConfig,
 } from "./config.ts";
+
 import { allStates, type IssueState } from "./state.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -96,7 +97,8 @@ export default function ghAgent(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("gh-agent", {
-    description: "Autonomous GitHub issue worker: setup | start | stop | status | once | logs",
+    description:
+      "Autonomous GitHub issue worker: setup | add-app | start | stop | status | once | logs",
     handler: async (args, ctx) => {
       const [sub = "status", ...rest] = args.trim().split(/\s+/).filter(Boolean);
 
@@ -106,9 +108,14 @@ export default function ghAgent(pi: ExtensionAPI) {
             ensureDirs();
             const appId = await ctx.ui.input(
               "GitHub App ID",
-              "Find it at github.com/settings/apps/matanlurey-agent",
+              "The numeric App ID from the App's settings page",
             );
             if (!appId) return;
+
+            const keyPath = await ctx.ui.input(
+              "Private key path",
+              path.join(ROOT, "private-key.pem"),
+            );
 
             const label = (await ctx.ui.input("Issue label to watch", "good for agent")) ||
               "good for agent";
@@ -123,7 +130,12 @@ export default function ghAgent(pi: ExtensionAPI) {
             );
 
             const cfg = writeConfig({
-              appId: appId.trim(),
+              apps: [
+                {
+                  appId: appId.trim(),
+                  privateKeyPath: (keyPath || path.join(ROOT, "private-key.pem")).trim(),
+                },
+              ],
               label: label.trim(),
               repos: (reposRaw ?? "")
                 .split(",")
@@ -135,7 +147,37 @@ export default function ghAgent(pi: ExtensionAPI) {
 
             ctx.ui.notify(`Wrote ${CONFIG_PATH}`, "info");
             pi.sendUserMessage(
-              `I configured the GitHub issue agent:\n\n- App ID: ${cfg.appId}\n- Label: "${cfg.label}"\n- Repos: ${cfg.repos.length ? cfg.repos.join(", ") : "(all installed)"}\n- Max concurrent: ${cfg.maxConcurrentIssues}\n- Dry run: ${cfg.dryRun}\n\nConfig is at ${CONFIG_PATH}. Verify the App is installed on those repos, then run \`/gh-agent once\` to test a single cycle.`,
+              `I configured the GitHub issue agent:\n\n- Apps: ${cfg.apps.map((a) => a.appId).join(", ")}\n- Label: "${cfg.label}"\n- Repos: ${cfg.repos.length ? cfg.repos.join(", ") : "(all installed)"}\n- Max concurrent: ${cfg.maxConcurrentIssues}\n- Dry run: ${cfg.dryRun}\n\nConfig is at ${CONFIG_PATH}. Verify the App is installed on those repos, then run \`/gh-agent once\` to test a single cycle.`,
+            );
+            return;
+          }
+
+          case "add-app": {
+            // A private App only installs on the account that owns it, so
+            // covering a personal account plus an org needs one App per account.
+            if (!configExists()) {
+              ctx.ui.notify("No config yet. Run /gh-agent setup first.", "error");
+              return;
+            }
+            const current = loadConfig();
+            const appId = await ctx.ui.input("Additional GitHub App ID", "e.g. 4460000");
+            if (!appId) return;
+            const keyPath = await ctx.ui.input(
+              "Private key path for that App",
+              path.join(ROOT, `${appId.trim()}.pem`),
+            );
+            if (!keyPath) return;
+
+            const updated = writeConfig({
+              ...current,
+              apps: [
+                ...current.apps,
+                { appId: appId.trim(), privateKeyPath: keyPath.trim() },
+              ],
+            });
+            ctx.ui.notify(`Now using ${updated.apps.length} Apps.`, "info");
+            pi.sendUserMessage(
+              `Added App ${appId.trim()} to the issue agent config. Apps are now: ${updated.apps.map((a) => a.appId).join(", ")}. Run \`/gh-agent once\` to confirm both authenticate and which repos each can reach.`,
             );
             return;
           }
@@ -218,7 +260,7 @@ export default function ghAgent(pi: ExtensionAPI) {
               ? (() => {
                   try {
                     const c = loadConfig();
-                    return `Label "${c.label}", ${c.repos.length ? c.repos.join(", ") : "all installed repos"}${c.dryRun ? ", DRY RUN" : ""}.`;
+                    return `${c.apps.length} App(s): ${c.apps.map((a) => a.appId).join(", ")}. Label "${c.label}", ${c.repos.length ? c.repos.join(", ") : "all installed repos"}${c.dryRun ? ", DRY RUN" : ""}.`;
                   } catch (e) {
                     return `Config problem: ${(e as Error).message}`;
                   }

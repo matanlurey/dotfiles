@@ -130,7 +130,7 @@ export async function ensureWorktree(
   const res = await exec("git", args, { cwd: clone, timeoutMs: 120_000 });
   if (res.code !== 0) throw new Error(`worktree add failed: ${res.stderr}`);
 
-  const id = await gh.gitIdentity();
+  const id = await gh.gitIdentity(state.repo);
   await exec("git", ["config", "user.name", id.name], { cwd: wt });
   await exec("git", ["config", "user.email", id.email], { cwd: wt });
 

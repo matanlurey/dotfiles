@@ -11,7 +11,7 @@
 
 import { createSign } from "node:crypto";
 import fs from "node:fs";
-import type { Config } from "./config.ts";
+import type { AppCred, Config } from "./config.ts";
 import { TOKEN_CACHE } from "./config.ts";
 
 const API = "https://api.github.com";
@@ -83,13 +83,19 @@ export type CheckSummary = {
   total: number;
 };
 
-type Installation = {
+export type Installation = {
   id: number;
   account: string;
   /** "all" or "selected". "all" means every repo on that account. */
   selection: string;
+  /** Which configured App this installation belongs to. */
+  appId: string;
 };
 
+/** Where a repo's requests should be routed. */
+type Route = { app: AppCred; installationId: number };
+
+/** Keyed "<appId>:<installationId>" so two Apps never share a token slot. */
 type TokenCache = Record<string, { token: string; expiresAt: string }>;
 
 function base64url(input: Buffer | string): string {
@@ -124,13 +130,14 @@ export class GitHubError extends Error {
 
 export class GitHub {
   #cfg: Config;
-  /** installation id -> token. An App may be installed on several accounts. */
-  #tokens = new Map<number, { token: string; expiresAt: number }>();
+  /** "<appId>:<installationId>" -> token. */
+  #tokens = new Map<string, { token: string; expiresAt: number }>();
   #installations: Installation[] | undefined;
-  /** repo full name -> installation id that can reach it. */
-  #repoIndex: Map<string, number> | undefined;
-  #botLogin: string | undefined;
-  #botUserId: number | undefined;
+  /** repo full name -> the App + installation that can reach it. */
+  #repoIndex: Map<string, Route> | undefined;
+  /** appId -> bot login, e.g. "matanlurey-agent[bot]". */
+  #botLogins = new Map<string, string>();
+  #botUserIds = new Map<string, number>();
 
   constructor(cfg: Config) {
     this.#cfg = cfg;
@@ -138,10 +145,10 @@ export class GitHub {
     // fresh token per installation every time.
     try {
       const cached = JSON.parse(fs.readFileSync(TOKEN_CACHE, "utf-8")) as TokenCache;
-      for (const [id, entry] of Object.entries(cached)) {
+      for (const [key, entry] of Object.entries(cached)) {
         const expiry = Date.parse(entry.expiresAt);
         if (expiry - Date.now() > 60_000) {
-          this.#tokens.set(Number(id), { token: entry.token, expiresAt: expiry });
+          this.#tokens.set(key, { token: entry.token, expiresAt: expiry });
         }
       }
     } catch {
@@ -151,8 +158,8 @@ export class GitHub {
 
   #persistTokens(): void {
     const out: TokenCache = {};
-    for (const [id, entry] of this.#tokens) {
-      out[String(id)] = {
+    for (const [key, entry] of this.#tokens) {
+      out[key] = {
         token: entry.token,
         expiresAt: new Date(entry.expiresAt).toISOString(),
       };
@@ -160,12 +167,12 @@ export class GitHub {
     fs.writeFileSync(TOKEN_CACHE, JSON.stringify(out), { mode: 0o600 });
   }
 
-  #privateKey(): string {
-    return fs.readFileSync(this.#cfg.privateKeyPath, "utf-8");
+  #appJwt(app: AppCred): string {
+    return signAppJwt(app.appId, fs.readFileSync(app.privateKeyPath, "utf-8"));
   }
 
-  async #appRequest<T>(path: string): Promise<T> {
-    const jwt = signAppJwt(this.#cfg.appId, this.#privateKey());
+  async #appRequest<T>(app: AppCred, path: string): Promise<T> {
+    const jwt = this.#appJwt(app);
     const res = await fetch(`${API}${path}`, {
       headers: {
         Authorization: `Bearer ${jwt}`,
@@ -177,30 +184,53 @@ export class GitHub {
     if (!res.ok) {
       throw new GitHubError(
         res.status,
-        `App request ${path} failed: ${res.status} ${await res.text()}`,
+        `App request ${path} (app ${app.appId}) failed: ${res.status} ${await res.text()}`,
       );
     }
     return (await res.json()) as T;
   }
 
-  /** Every installation of this App, across user and org accounts. */
+  /** Every installation of every configured App. */
   async installations(): Promise<Installation[]> {
     if (this.#installations) return this.#installations;
-    const raw = await this.#appRequest<
-      { id: number; account: { login: string }; repository_selection: string }[]
-    >("/app/installations");
-    if (raw.length === 0) {
+    const out: Installation[] = [];
+    const failures: string[] = [];
+
+    for (const app of this.#cfg.apps) {
+      try {
+        const raw = await this.#appRequest<
+          { id: number; account: { login: string }; repository_selection: string }[]
+        >(app, "/app/installations");
+        for (const i of raw) {
+          out.push({
+            id: i.id,
+            account: i.account.login,
+            selection: i.repository_selection,
+            appId: app.appId,
+          });
+        }
+      } catch (e) {
+        // One misconfigured App must not blind the daemon to the others.
+        failures.push(`app ${app.appId}: ${(e as Error).message}`);
+      }
+    }
+
+    if (out.length === 0) {
       throw new GitHubError(
         404,
-        "The App has no installations. Install it on your account/org and grant it the target repos.",
+        `No App has any installations. Install each App on its account and grant it the target repos.${
+          failures.length ? `\n${failures.join("\n")}` : ""
+        }`,
       );
     }
-    this.#installations = raw.map((i) => ({
-      id: i.id,
-      account: i.account.login,
-      selection: i.repository_selection,
-    }));
-    return this.#installations;
+    this.#installations = out;
+    return out;
+  }
+
+  #appFor(appId: string): AppCred {
+    const app = this.#cfg.apps.find((a) => a.appId === appId);
+    if (!app) throw new GitHubError(500, `No credentials configured for app ${appId}`);
+    return app;
   }
 
   /**
@@ -210,16 +240,20 @@ export class GitHub {
    * account, each with its own token. Using the wrong one yields a confusing
    * 404, so routing is resolved up front.
    */
-  async #buildRepoIndex(): Promise<Map<string, number>> {
+  async #buildRepoIndex(): Promise<Map<string, Route>> {
     if (this.#repoIndex) return this.#repoIndex;
-    const index = new Map<string, number>();
+    const index = new Map<string, Route>();
     for (const inst of await this.installations()) {
+      const app = this.#appFor(inst.appId);
       try {
-        const body = await this.requestAs<{ repositories: { full_name: string }[] }>(
-          inst.id,
+        const body = await this.#send<{ repositories: { full_name: string }[] }>(
+          await this.tokenFor(app, inst.id),
           "/installation/repositories?per_page=100",
+          {},
         );
-        for (const r of body.repositories) index.set(r.full_name, inst.id);
+        for (const r of body.repositories) {
+          index.set(r.full_name, { app, installationId: inst.id });
+        }
       } catch {
         // One unreachable installation must not hide the others.
       }
@@ -228,17 +262,18 @@ export class GitHub {
     return index;
   }
 
-  /** Which installation can reach this repo, if any. */
-  async installationForRepo(repo: string): Promise<number | undefined> {
+  /** Which App + installation can reach this repo, if any. */
+  async routeFor(repo: string): Promise<Route | undefined> {
     return (await this.#buildRepoIndex()).get(repo);
   }
 
-  /** Mint (or reuse) a token for one installation. */
-  async tokenFor(installationId: number): Promise<string> {
-    const cached = this.#tokens.get(installationId);
+  /** Mint (or reuse) a token for one App's installation. */
+  async tokenFor(app: AppCred, installationId: number): Promise<string> {
+    const key = `${app.appId}:${installationId}`;
+    const cached = this.#tokens.get(key);
     if (cached && cached.expiresAt - Date.now() > 60_000) return cached.token;
 
-    const jwt = signAppJwt(this.#cfg.appId, this.#privateKey());
+    const jwt = this.#appJwt(app);
     const res = await fetch(`${API}/app/installations/${installationId}/access_tokens`, {
       method: "POST",
       headers: {
@@ -255,7 +290,7 @@ export class GitHub {
       );
     }
     const body = (await res.json()) as { token: string; expires_at: string };
-    this.#tokens.set(installationId, {
+    this.#tokens.set(key, {
       token: body.token,
       expiresAt: Date.parse(body.expires_at),
     });
@@ -263,29 +298,20 @@ export class GitHub {
     return body.token;
   }
 
-  /** Token for whichever installation owns this repo. */
+  /** Token for whichever App installation owns this repo. */
   async token(repo?: string): Promise<string> {
     if (repo) {
-      const id = await this.installationForRepo(repo);
-      if (id === undefined) {
+      const route = await this.routeFor(repo);
+      if (!route) {
         throw new GitHubError(
           404,
-          `No installation of this App can reach ${repo}. Install it on ${repo.split("/")[0]} and grant that repo.`,
+          `No configured App can reach ${repo}. Install an App on "${repo.split("/")[0]}" and grant that repo.`,
         );
       }
-      return this.tokenFor(id);
+      return this.tokenFor(route.app, route.installationId);
     }
     const [first] = await this.installations();
-    return this.tokenFor(first.id);
-  }
-
-  /** Issue a request against a specific installation. */
-  async requestAs<T>(
-    installationId: number,
-    path: string,
-    init: { method?: string; body?: unknown } = {},
-  ): Promise<T> {
-    return this.#send<T>(await this.tokenFor(installationId), path, init);
+    return this.tokenFor(this.#appFor(first.appId), first.id);
   }
 
   async #send<T>(
@@ -333,27 +359,68 @@ export class GitHub {
     return [...(await this.#buildRepoIndex()).keys()];
   }
 
-  async appSlug(): Promise<string> {
-    if (this.#botLogin) return this.#botLogin;
-    const app = await this.#appRequest<{ slug: string }>("/app");
-    this.#botLogin = `${app.slug}[bot]`;
-    return this.#botLogin;
+  /** Bot login for one App, e.g. "matanlurey-agent[bot]". */
+  async slugFor(app: AppCred): Promise<string> {
+    const cached = this.#botLogins.get(app.appId);
+    if (cached) return cached;
+    const meta = await this.#appRequest<{ slug: string }>(app, "/app");
+    const login = `${meta.slug}[bot]`;
+    this.#botLogins.set(app.appId, login);
+    return login;
+  }
+
+  /**
+   * Every bot login across configured Apps.
+   *
+   * Comment filtering must ignore all of them, otherwise one App would treat
+   * another's comments as human input and loop.
+   */
+  async botLogins(): Promise<string[]> {
+    return Promise.all(this.#cfg.apps.map((a) => this.slugFor(a)));
+  }
+
+  /** Bot login for whichever App owns this repo. */
+  async slugForRepo(repo: string): Promise<string> {
+    const route = await this.routeFor(repo);
+    if (!route) throw new GitHubError(404, `No configured App can reach ${repo}.`);
+    return this.slugFor(route.app);
+  }
+
+  /**
+   * True when any configured App accepts installations from any account.
+   *
+   * A public App can be installed by strangers, and their repos then show up in
+   * installedRepos(). Callers must pair this with an explicit repo allowlist.
+   */
+  async appIsPublic(): Promise<boolean> {
+    for (const app of this.#cfg.apps) {
+      try {
+        const meta = await this.#appRequest<{ public: boolean }>(app, "/app");
+        if (meta.public === true) return true;
+      } catch {
+        // Treat an unreadable App as public: fail safe, not open.
+        return true;
+      }
+    }
+    return false;
   }
 
   /** Bot user id, needed to build the noreply commit email. */
-  async botUserId(): Promise<number> {
-    if (this.#botUserId !== undefined) return this.#botUserId;
-    const login = await this.appSlug();
-    const user = await this.request<{ id: number }>(
-      `/users/${encodeURIComponent(login)}`,
-    );
-    this.#botUserId = user.id;
+  async botUserIdFor(app: AppCred): Promise<number> {
+    const cached = this.#botUserIds.get(app.appId);
+    if (cached !== undefined) return cached;
+    const login = await this.slugFor(app);
+    const user = await this.request<{ id: number }>(`/users/${encodeURIComponent(login)}`);
+    this.#botUserIds.set(app.appId, user.id);
     return user.id;
   }
 
-  async gitIdentity(): Promise<{ name: string; email: string }> {
-    const login = await this.appSlug();
-    const id = await this.botUserId();
+  /** Commit identity for the App that owns this repo. */
+  async gitIdentity(repo: string): Promise<{ name: string; email: string }> {
+    const route = await this.routeFor(repo);
+    if (!route) throw new GitHubError(404, `No configured App can reach ${repo}.`);
+    const login = await this.slugFor(route.app);
+    const id = await this.botUserIdFor(route.app);
     return { name: login, email: `${id}+${login}@users.noreply.github.com` };
   }
 

@@ -43,7 +43,21 @@ function branchFor(cfg: Config, issue: number): string {
 
 async function resolveRepos(cfg: Config, gh: GitHub): Promise<string[]> {
   const installed = await gh.installedRepos();
-  if (cfg.repos.length === 0) return installed;
+
+  if (cfg.repos.length === 0) {
+    // A public App can be installed by anyone, and those repos land in
+    // installedRepos(). Without an allowlist the daemon would happily start
+    // opening PRs in a stranger's repo, so refuse instead.
+    if (await gh.appIsPublic()) {
+      log(
+        'refusing to run: the App accepts installations from any account but config "repos" is empty. ' +
+          "Anyone who installs it would get an autonomous worker in their repos. " +
+          "List the repos you actually want worked, or make the App private again.",
+      );
+      return [];
+    }
+    return installed;
+  }
 
   const allowed = cfg.repos.filter((r) => installed.includes(r));
   const missing = cfg.repos.filter((r) => !installed.includes(r));
@@ -98,13 +112,15 @@ async function reconcile(
     }
   }
 
-  const botLogin = await gh.appSlug();
+  // Ignore every configured bot, not just this repo's, so two Apps never treat
+  // each other's comments as human input.
+  const bots = await gh.botLogins();
 
   // A human answering a blocked question is what unblocks it.
   if (state.phase === "blocked") {
     const comments = await gh.issueComments(state.repo, state.issue);
     const fresh = comments.filter(
-      (c) => c.user.login !== botLogin && !state.handledCommentIds.includes(c.id),
+      (c) => !bots.includes(c.user.login) && !state.handledCommentIds.includes(c.id),
     );
     if (fresh.length === 0) return false;
     state.handledCommentIds.push(...fresh.map((c) => c.id));
@@ -124,11 +140,11 @@ async function reconcile(
 
     const reviews = await gh.reviews(state.repo, prNumber);
     const newReviews = reviews.filter(
-      (r) => r.user.login !== botLogin && !state.handledReviewIds.includes(r.id),
+      (r) => !bots.includes(r.user.login) && !state.handledReviewIds.includes(r.id),
     );
     const reviewComments = await gh.reviewComments(state.repo, prNumber);
     const newComments = reviewComments.filter(
-      (c) => c.user.login !== botLogin && !state.handledReviewCommentIds.includes(c.id),
+      (c) => !bots.includes(c.user.login) && !state.handledReviewCommentIds.includes(c.id),
     );
 
     if (newReviews.length > 0 || newComments.length > 0) {
@@ -272,9 +288,9 @@ async function main(): Promise<void> {
     process.on("SIGINT", cleanup);
   }
 
-  const slug = await gh.appSlug();
+  const slugs = await gh.botLogins();
   log(
-    `daemon up as ${slug} (label "${cfg.label}", every ${cfg.pollIntervalSeconds}s, max ${cfg.maxConcurrentIssues} concurrent${cfg.dryRun ? ", DRY RUN" : ""})`,
+    `daemon up as ${slugs.join(" + ")} (label "${cfg.label}", every ${cfg.pollIntervalSeconds}s, max ${cfg.maxConcurrentIssues} concurrent${cfg.dryRun ? ", DRY RUN" : ""})`,
   );
 
   for (;;) {
