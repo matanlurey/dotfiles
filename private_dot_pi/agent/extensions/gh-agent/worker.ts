@@ -359,24 +359,24 @@ async function updateProgressComment(
     .join(", ");
 
   const body = [
-    STATUS_MARKER,
-    `**Agent status: ${state.phase.replace(/_/g, " ")}**`,
-    "",
+    `${STATUS_MARKER}\n**Agent status: ${state.phase.replace(/_/g, " ")}**`,
     `Working for ${humanDuration(elapsedMs)} of a ${Math.round(PHASE_TIMEOUT_MS / 60000)} minute budget.`,
-    "",
-    `| | |`,
-    `|---|---|`,
-    `| Turns | ${progress.turns} |`,
-    `| Tool calls | ${progress.toolCalls} |`,
-    tools ? `| Breakdown | ${tools} |` : "",
-    progress.last ? `| Currently | \`${progress.last.replace(/`/g, "'")}\` |` : "",
-    "",
-    state.prNumber ? `Pull request: #${state.prNumber}\n` : "",
+    [
+      `| | |`,
+      `|---|---|`,
+      `| Turns | ${progress.turns} |`,
+      `| Tool calls | ${progress.toolCalls} |`,
+      tools ? `| Breakdown | ${tools} |` : "",
+      progress.last ? `| Currently | \`${progress.last.replace(/`/g, "'")}\` |` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    state.prNumber ? `Pull request: #${state.prNumber}` : "",
     `<sub>Branch \`${state.branch}\`. This comment updates in place.` +
       ` Remove the \`${cfg.label}\` label to stop me.</sub>`,
   ]
-    .filter((l) => l !== "")
-    .join("\n");
+    .filter(Boolean)
+    .join("\n\n");
 
   try {
     await gh.updateComment(state.repo, state.statusCommentId, body);
@@ -494,6 +494,7 @@ export async function runPi(
         status: "failed",
         question: null,
         prTitle: null,
+        prBody: null,
         summary: `The run hit the ${Math.round(PHASE_TIMEOUT_MS / 60000)} minute phase budget and was stopped.`,
       },
     };
@@ -534,6 +535,27 @@ const ALL_STATUS_LABELS = [
 ];
 
 /**
+ * What the agent is waiting on, when it is waiting on a person.
+ *
+ * Stated explicitly so nobody has to infer from a phase name whether the ball
+ * is in their court.
+ */
+function waitingOn(state: IssueState): string | undefined {
+  switch (state.phase) {
+    case "awaiting_review":
+      return state.prNumber
+        ? `**Waiting for a human to review and approve #${state.prNumber}.** I won't merge it myself.`
+        : "**Waiting for a human to review.**";
+    case "blocked":
+      return "**Waiting for a human to answer my question.** Reply on this issue and I'll pick it straight back up.";
+    case "paused":
+      return "**Waiting for a human to take this forward.** Remove and re-add the label to restart me.";
+    default:
+      return undefined;
+  }
+}
+
+/**
  * Publish the current phase to the issue: one edited-in-place status comment
  * and one mutually exclusive label.
  *
@@ -565,17 +587,18 @@ export async function publishStatus(
     log(`status label failed: ${(e as Error).message}`);
   }
 
-  const pr = state.prNumber ? `\n\nPull request: #${state.prNumber}` : "";
+  const waiting = waitingOn(state);
+  // Joined with blank lines so each block is its own markdown paragraph.
   const body = [
-    STATUS_MARKER,
-    `**Agent status: ${state.phase.replace(/_/g, " ")}**`,
-    "",
-    detail ?? entry.blurb,
-    pr,
-    "",
+    `${STATUS_MARKER}\n**Agent status: ${state.phase.replace(/_/g, " ")}**`,
+    waiting ?? detail ?? entry.blurb,
+    waiting && detail ? detail : "",
+    state.prNumber && !waiting ? `Pull request: #${state.prNumber}` : "",
     `<sub>Branch \`${state.branch}\`. Updated ${new Date().toISOString().replace("T", " ").slice(0, 16)}Z.` +
       ` Remove the \`${cfg.label}\` label to stop me.</sub>`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   try {
     // Reuse the cached id when we have it; otherwise find or create the comment
@@ -746,10 +769,9 @@ export async function step(
 
       // Remember a proposed title so pr_open can use it. Many repos gate CI on
       // a Conventional Commits PR title, which the raw issue title rarely is.
-      if (verdict.prTitle) {
-        state.prTitle = verdict.prTitle;
-        writeState(state);
-      }
+      if (verdict.prTitle) state.prTitle = verdict.prTitle;
+      if (verdict.prBody) state.prBody = verdict.prBody;
+      if (verdict.prTitle || verdict.prBody) writeState(state);
 
       const committed = await commitAll(wt, `${issue.title}\n\nCloses #${issue.number}`);
       if (!committed) {
@@ -782,9 +804,17 @@ export async function step(
       await ensureWorktree(state, cfg, gh, log);
       await push(state, gh, cfg, log);
       const base = await gh.defaultBranch(state.repo);
+      // Body carries why; the diff already shows what. state.note is the long
+      // internal record and deliberately does not go in here.
       const pr = await gh.createPr(state.repo, {
         title: state.prTitle ?? issue.title,
-        body: `Closes #${issue.number}\n\n${state.note ?? ""}\n\n---\n\nOpened autonomously from the \`${cfg.label}\` label. Review comments get a new commit in reply, never a force-push.`,
+        body: [
+          state.prBody ?? "",
+          `Closes #${issue.number}`,
+          `<sub>Opened by the issue agent. Review comments get a reply and a new commit, never a force-push.</sub>`,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
         head: state.branch,
         base,
         draft: cfg.openPrAsDraft,

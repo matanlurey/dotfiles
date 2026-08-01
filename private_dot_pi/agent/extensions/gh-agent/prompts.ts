@@ -26,6 +26,12 @@ export type Verdict = {
    * CI on a Conventional Commits PR title).
    */
   prTitle: string | null;
+  /**
+   * Reviewer-facing PR body. Deliberately separate from `summary`, which is an
+   * internal record and runs long. Kept short on purpose: the diff already
+   * shows what changed, so the body only needs to carry why.
+   */
+  prBody: string | null;
 };
 
 const VERDICT_CONTRACT = `
@@ -34,7 +40,7 @@ const VERDICT_CONTRACT = `
 End your final message with exactly this block, and nothing after it:
 
 ${VERDICT_START}
-{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "summary": "<one paragraph>"}
+{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "summary": "<one paragraph>"}
 ${VERDICT_END}
 
 Rules for the verdict:
@@ -42,6 +48,8 @@ Rules for the verdict:
 - status "needs_help" means a human must answer something before you can proceed correctly. Set question to the exact question to post on the issue. Ask about intent, requirements, or tradeoffs. Never ask a question you can answer yourself by reading the repo.
 - status "failed" means you could not do the work at all. Explain why in summary.
 - prTitle proposes the pull request title. Check whether the repo enforces a title convention (a Conventional Commits CI check, CONTRIBUTING.md, or the style of recent merged PRs and CHANGELOG entries) and match it, including any breaking-change marker. Leave it null if you have no better title than the issue title.
+- prBody is what a reviewer reads. Keep it under 120 words. The diff already shows what changed, so do not narrate it: no file-by-file walkthrough, no restating the issue, no summary of your own process. Lead with why the change is shaped the way it is, then note anything genuinely non-obvious (a tradeoff you made, a risk, something you deliberately left out), then say what you want looked at most closely. Omit any section you have nothing real to put in it. Plain prose or a couple of short bullets. No headings, no tables, no emoji.
+- summary is the internal record and can be as long as it needs to be. Do not put that text in prBody.
 - Never fabricate progress. If you did not finish, say so.`;
 
 const HOUSE_RULES = `
@@ -190,6 +198,7 @@ export function parseVerdict(output: string): Verdict {
       status: "failed",
       question: null,
       prTitle: null,
+      prBody: null,
       summary: "The run produced no verdict block, so its result cannot be trusted.",
     };
   }
@@ -206,6 +215,11 @@ export function parseVerdict(output: string): Verdict {
         typeof parsed.prTitle === "string" && parsed.prTitle.trim()
           ? parsed.prTitle.replace(/\s+/g, " ").trim().slice(0, 120)
           : null,
+      // Hard cap as a backstop: the prompt asks for brevity, this enforces it.
+      prBody:
+        typeof parsed.prBody === "string" && parsed.prBody.trim()
+          ? truncateWords(parsed.prBody.trim(), 150)
+          : null,
       summary: typeof parsed.summary === "string" ? parsed.summary : "(no summary)",
     };
   } catch {
@@ -214,9 +228,15 @@ export function parseVerdict(output: string): Verdict {
       status: "failed",
       question: null,
       prTitle: null,
+      prBody: null,
       summary: "The verdict block was not valid JSON.",
     };
   }
+}
+
+function truncateWords(text: string, maxWords: number): string {
+  const words = text.split(/\s+/);
+  return words.length <= maxWords ? text : `${words.slice(0, maxWords).join(" ")}...`;
 }
 
 /** Strip the verdict block so it never leaks into a GitHub comment. */
