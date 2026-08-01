@@ -38,11 +38,22 @@ Every headless run must end with a machine-readable verdict:
 
 ```
 <<<AGENT_VERDICT>>>
-{"confidence": 0.82, "status": "ok", "question": null, "summary": "..."}
+{"confidence": 0.82, "status": "ok", "question": null, "prTitle": "fix(core): ...", "summary": "..."}
 <<<END_AGENT_VERDICT>>>
 ```
 
 The daemon parses it and escalates rather than guessing. A missing or malformed block counts as zero confidence, so a truncated or confused run asks for help instead of opening a PR. Confidence thresholds: 0.6 to leave planning, 0.5 for the rest.
+
+The verdict is also the agent's only channel for GitHub-side requests. It has no credentials, so `prTitle` is how it asks for a PR title matching the repo's convention (many repos gate CI on a Conventional Commits title). Agent proposes, harness disposes.
+
+### Progress reporting
+
+A GitHub App's bot user cannot be assigned to an issue, so ownership is signalled two other ways:
+
+- A mutually exclusive label: `agent:working`, `agent:in-review`, `agent:needs-input`, `agent:paused`. Created on demand, cleared when the agent stands down.
+- One status comment, edited in place rather than reposted. Every two minutes during a run it updates with elapsed time, turns, tool calls, a per-tool breakdown, and the current action. GitHub doesn't notify on edits, so this stays out of subscribers' inboxes.
+
+Locally, `pi` output streams to the per-run log as it arrives (`tail -f` works mid-run) and the daemon logs a heartbeat every 30 seconds.
 
 ## Guardrails
 
@@ -55,6 +66,7 @@ These hold by construction, not by prompt instruction. The agent is told never t
 - Bounded CI-fix attempts and review rounds. Exceeding either pauses rather than looping.
 - Repo access is bounded by the GitHub App installation, plus an optional `repos` allowlist.
 - Dry-run mode plans and logs without commenting, pushing, or opening PRs.
+- The worker runs with GitHub credentials stripped from its environment (`GH_TOKEN`, `GITHUB_TOKEN`, `GH_CONFIG_DIR`, git config and askpass all neutralized), and a tool hook blocks `gh` plus mutating `git`/`jj`. Without this the agent inherits the human's `gh` login and can act as the repo owner, including merging its own PR. Read-only git stays available.
 
 The agent is also told not to weaken tests or edit CI config to force a green pipeline, and to escalate on unrelated/flaky failures instead.
 
@@ -145,9 +157,12 @@ Start with `dryRun: true`, label one small issue, and read the log before lettin
     "maxUsdPerIssue": 5
   },
   "dryRun": false,
-  "branchPrefix": "agent/"
+  "branchPrefix": "agent/",
+  "openPrAsDraft": false
 }
 ```
+
+`openPrAsDraft: true` opens PRs as drafts and promotes them to ready once checks go green, so reviewers aren't pinged for something that may not build.
 
 Empty `repos` means every repo the App installations can see, which is refused outright if any configured App is public. A legacy top-level `appId` / `privateKeyPath` pair is still accepted and normalized into a single-entry `apps` array.
 

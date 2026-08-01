@@ -596,17 +596,39 @@ export class GitHub {
     );
   }
 
-  /** Roll up check runs and legacy commit statuses for a head SHA. */
+  /**
+   * Roll up check runs and legacy commit statuses for a head SHA.
+   *
+   * A re-run leaves the superseded attempt in the list, so the same check name
+   * can appear both failed and passed. Only the newest run per name counts;
+   * without that, a check that failed once and then passed would keep the
+   * agent in a CI-fix loop forever.
+   */
   async checks(repo: string, sha: string): Promise<CheckSummary> {
-    const runs = await this.request<{
+    const raw = await this.request<{
       total_count: number;
       check_runs: {
         name: string;
         status: string;
         conclusion: string | null;
         html_url: string;
+        started_at: string | null;
+        id: number;
       }[];
     }>(`/repos/${repo}/commits/${sha}/check-runs?per_page=100`);
+
+    const newest = new Map<string, (typeof raw.check_runs)[number]>();
+    for (const run of raw.check_runs) {
+      const prev = newest.get(run.name);
+      if (!prev) {
+        newest.set(run.name, run);
+        continue;
+      }
+      const a = Date.parse(run.started_at ?? "") || run.id;
+      const b = Date.parse(prev.started_at ?? "") || prev.id;
+      if (a > b) newest.set(run.name, run);
+    }
+    const runs = { total_count: newest.size, check_runs: [...newest.values()] };
 
     const status = await this.request<{
       state: string;
