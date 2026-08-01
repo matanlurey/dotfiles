@@ -519,7 +519,7 @@ async function failureLogs(
     if (!m) continue;
     const jobId = m[m.length - 1];
     try {
-      const token = await gh.token();
+      const token = await gh.token(state.repo);
       const res = await fetch(
         `https://api.github.com/repos/${state.repo}/actions/jobs/${jobId}/logs`,
         {

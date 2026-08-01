@@ -83,7 +83,14 @@ export type CheckSummary = {
   total: number;
 };
 
-type TokenCache = { token: string; expiresAt: string; installationId: number };
+type Installation = {
+  id: number;
+  account: string;
+  /** "all" or "selected". "all" means every repo on that account. */
+  selection: string;
+};
+
+type TokenCache = Record<string, { token: string; expiresAt: string }>;
 
 function base64url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64url");
@@ -117,27 +124,40 @@ export class GitHubError extends Error {
 
 export class GitHub {
   #cfg: Config;
-  #token: string | undefined;
-  #expiresAt = 0;
-  #installationId: number | undefined;
+  /** installation id -> token. An App may be installed on several accounts. */
+  #tokens = new Map<number, { token: string; expiresAt: number }>();
+  #installations: Installation[] | undefined;
+  /** repo full name -> installation id that can reach it. */
+  #repoIndex: Map<string, number> | undefined;
   #botLogin: string | undefined;
   #botUserId: number | undefined;
 
   constructor(cfg: Config) {
     this.#cfg = cfg;
-    // Reuse a cached token across daemon restarts so a bounce doesn't burn
-    // a fresh installation token every time.
+    // Reuse cached tokens across daemon restarts so a bounce doesn't burn a
+    // fresh token per installation every time.
     try {
       const cached = JSON.parse(fs.readFileSync(TOKEN_CACHE, "utf-8")) as TokenCache;
-      const expiry = Date.parse(cached.expiresAt);
-      if (expiry - Date.now() > 60_000) {
-        this.#token = cached.token;
-        this.#expiresAt = expiry;
-        this.#installationId = cached.installationId;
+      for (const [id, entry] of Object.entries(cached)) {
+        const expiry = Date.parse(entry.expiresAt);
+        if (expiry - Date.now() > 60_000) {
+          this.#tokens.set(Number(id), { token: entry.token, expiresAt: expiry });
+        }
       }
     } catch {
-      // Missing or corrupt cache is fine; we mint a new token.
+      // Missing or corrupt cache is fine; we mint new tokens.
     }
+  }
+
+  #persistTokens(): void {
+    const out: TokenCache = {};
+    for (const [id, entry] of this.#tokens) {
+      out[String(id)] = {
+        token: entry.token,
+        expiresAt: new Date(entry.expiresAt).toISOString(),
+      };
+    }
+    fs.writeFileSync(TOKEN_CACHE, JSON.stringify(out), { mode: 0o600 });
   }
 
   #privateKey(): string {
@@ -163,26 +183,61 @@ export class GitHub {
     return (await res.json()) as T;
   }
 
-  /** Resolve the single installation for this App, or the first one found. */
-  async installationId(): Promise<number> {
-    if (this.#installationId !== undefined) return this.#installationId;
-    const installs = await this.#appRequest<{ id: number; account: { login: string } }[]>(
-      "/app/installations",
-    );
-    if (installs.length === 0) {
+  /** Every installation of this App, across user and org accounts. */
+  async installations(): Promise<Installation[]> {
+    if (this.#installations) return this.#installations;
+    const raw = await this.#appRequest<
+      { id: number; account: { login: string }; repository_selection: string }[]
+    >("/app/installations");
+    if (raw.length === 0) {
       throw new GitHubError(
         404,
         "The App has no installations. Install it on your account/org and grant it the target repos.",
       );
     }
-    this.#installationId = installs[0].id;
-    return this.#installationId;
+    this.#installations = raw.map((i) => ({
+      id: i.id,
+      account: i.account.login,
+      selection: i.repository_selection,
+    }));
+    return this.#installations;
   }
 
-  async token(): Promise<string> {
-    if (this.#token && this.#expiresAt - Date.now() > 60_000) return this.#token;
+  /**
+   * Map every reachable repo to the installation that can reach it.
+   *
+   * An App installed on both a user and an org has one installation per
+   * account, each with its own token. Using the wrong one yields a confusing
+   * 404, so routing is resolved up front.
+   */
+  async #buildRepoIndex(): Promise<Map<string, number>> {
+    if (this.#repoIndex) return this.#repoIndex;
+    const index = new Map<string, number>();
+    for (const inst of await this.installations()) {
+      try {
+        const body = await this.requestAs<{ repositories: { full_name: string }[] }>(
+          inst.id,
+          "/installation/repositories?per_page=100",
+        );
+        for (const r of body.repositories) index.set(r.full_name, inst.id);
+      } catch {
+        // One unreachable installation must not hide the others.
+      }
+    }
+    this.#repoIndex = index;
+    return index;
+  }
 
-    const installationId = await this.installationId();
+  /** Which installation can reach this repo, if any. */
+  async installationForRepo(repo: string): Promise<number | undefined> {
+    return (await this.#buildRepoIndex()).get(repo);
+  }
+
+  /** Mint (or reuse) a token for one installation. */
+  async tokenFor(installationId: number): Promise<string> {
+    const cached = this.#tokens.get(installationId);
+    if (cached && cached.expiresAt - Date.now() > 60_000) return cached.token;
+
     const jwt = signAppJwt(this.#cfg.appId, this.#privateKey());
     const res = await fetch(`${API}/app/installations/${installationId}/access_tokens`, {
       method: "POST",
@@ -200,25 +255,44 @@ export class GitHub {
       );
     }
     const body = (await res.json()) as { token: string; expires_at: string };
-    this.#token = body.token;
-    this.#expiresAt = Date.parse(body.expires_at);
-    fs.writeFileSync(
-      TOKEN_CACHE,
-      JSON.stringify({
-        token: body.token,
-        expiresAt: body.expires_at,
-        installationId,
-      } satisfies TokenCache),
-      { mode: 0o600 },
-    );
+    this.#tokens.set(installationId, {
+      token: body.token,
+      expiresAt: Date.parse(body.expires_at),
+    });
+    this.#persistTokens();
     return body.token;
   }
 
-  async request<T>(
+  /** Token for whichever installation owns this repo. */
+  async token(repo?: string): Promise<string> {
+    if (repo) {
+      const id = await this.installationForRepo(repo);
+      if (id === undefined) {
+        throw new GitHubError(
+          404,
+          `No installation of this App can reach ${repo}. Install it on ${repo.split("/")[0]} and grant that repo.`,
+        );
+      }
+      return this.tokenFor(id);
+    }
+    const [first] = await this.installations();
+    return this.tokenFor(first.id);
+  }
+
+  /** Issue a request against a specific installation. */
+  async requestAs<T>(
+    installationId: number,
     path: string,
     init: { method?: string; body?: unknown } = {},
   ): Promise<T> {
-    const token = await this.token();
+    return this.#send<T>(await this.tokenFor(installationId), path, init);
+  }
+
+  async #send<T>(
+    token: string,
+    path: string,
+    init: { method?: string; body?: unknown },
+  ): Promise<T> {
     const res = await fetch(path.startsWith("http") ? path : `${API}${path}`, {
       method: init.method ?? "GET",
       headers: {
@@ -240,12 +314,23 @@ export class GitHub {
     return (await res.json()) as T;
   }
 
-  /** Repos the installation can actually see. This is the effective allowlist. */
+  /**
+   * Request routed to the right installation.
+   *
+   * The owner/repo in a /repos/... path decides which token to use, so callers
+   * never have to think about installation routing.
+   */
+  async request<T>(
+    path: string,
+    init: { method?: string; body?: unknown } = {},
+  ): Promise<T> {
+    const m = path.match(/^\/repos\/([^/]+\/[^/]+)/);
+    return this.#send<T>(await this.token(m ? m[1] : undefined), path, init);
+  }
+
+  /** Every repo reachable across all installations. The effective allowlist. */
   async installedRepos(): Promise<string[]> {
-    const body = await this.request<{ repositories: { full_name: string }[] }>(
-      "/installation/repositories?per_page=100",
-    );
-    return body.repositories.map((r) => r.full_name);
+    return [...(await this.#buildRepoIndex()).keys()];
   }
 
   async appSlug(): Promise<string> {
@@ -328,7 +413,7 @@ export class GitHub {
     // Marking a draft ready is GraphQL-only; the REST draft field is read-only.
     const pr = await this.getPr(repo, number);
     if (!pr.draft) return;
-    const token = await this.token();
+    const token = await this.token(repo);
     const res = await fetch(`${API}/graphql`, {
       method: "POST",
       headers: {
@@ -428,7 +513,7 @@ export class GitHub {
 
   /** Clone URL carrying the installation token so git can push as the App. */
   async authenticatedRemote(repo: string): Promise<string> {
-    const token = await this.token();
+    const token = await this.token(repo);
     return `https://x-access-token:${token}@github.com/${repo}.git`;
   }
 }

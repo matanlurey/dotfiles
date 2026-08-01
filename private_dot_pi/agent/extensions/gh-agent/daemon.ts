@@ -44,10 +44,25 @@ function branchFor(cfg: Config, issue: number): string {
 async function resolveRepos(cfg: Config, gh: GitHub): Promise<string[]> {
   const installed = await gh.installedRepos();
   if (cfg.repos.length === 0) return installed;
+
   const allowed = cfg.repos.filter((r) => installed.includes(r));
   const missing = cfg.repos.filter((r) => !installed.includes(r));
+
   if (missing.length > 0) {
-    log(`configured repos not granted to the App, skipping: ${missing.join(", ")}`);
+    // An App installed on a user account cannot see org repos, and vice versa.
+    // Naming the accounts that do have installations makes that obvious.
+    const accounts = (await gh.installations()).map(
+      (i) => `${i.account} (${i.selection === "all" ? "all repos" : "selected repos"})`,
+    );
+    for (const repo of missing) {
+      const owner = repo.split("/")[0];
+      const hasOwner = (await gh.installations()).some((i) => i.account === owner);
+      log(
+        hasOwner
+          ? `${repo}: the App is installed on ${owner} but that repo isn't granted. Add it under Repository access.`
+          : `${repo}: no installation on "${owner}". Install the App on that account. Current installations: ${accounts.join(", ")}`,
+      );
+    }
   }
   return allowed;
 }
