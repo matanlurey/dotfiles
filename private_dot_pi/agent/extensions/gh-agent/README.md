@@ -78,6 +78,26 @@ Generate a private key, then save it as `~/.pi/agent/gh-agent-worker/private-key
 
 Install the App and grant it only the repos it should touch. That installation is the real allowlist, enforced by GitHub rather than by this code.
 
+#### Covering an org as well as a personal account
+
+A GitHub App is owned by one account. Left private ("Only on this account"), it can only ever be installed there, so an App owned by your user cannot reach `some-org/repo`. Two ways out:
+
+1. **One App per account (recommended).** Create a second App owned by the org, with the same permissions and its own key. Add it with `/gh-agent add-app`. Each repo is routed to whichever App can reach it.
+2. **Make the App public.** One App, but anyone can install it, and their repos would appear in `installedRepos()`. The daemon refuses to run in that mode unless `repos` is a non-empty allowlist.
+
+Multi-App config:
+
+```json
+{
+  "apps": [
+    { "appId": "4458550", "privateKeyPath": "~/.pi/agent/gh-agent-worker/private-key.pem" },
+    { "appId": "4460001", "privateKeyPath": "~/.pi/agent/gh-agent-worker/my-org.pem" }
+  ]
+}
+```
+
+Commits in each repo are attributed to that repo's App, so a PR in an org repo comes from the org's bot.
+
 ### 2. Configure
 
 ```
@@ -97,6 +117,7 @@ On each repo, require a PR and a review to merge. That makes "never push to main
 /gh-agent start    # detached daemon
 /gh-agent status   # what everything is doing
 /gh-agent logs 60  # tail the daemon log
+/gh-agent add-app  # add a second App (e.g. for an org)
 /gh-agent stop
 ```
 
@@ -108,8 +129,9 @@ Start with `dryRun: true`, label one small issue, and read the log before lettin
 
 ```json
 {
-  "appId": "1234567",
-  "privateKeyPath": "~/.pi/agent/gh-agent-worker/private-key.pem",
+  "apps": [
+    { "appId": "1234567", "privateKeyPath": "~/.pi/agent/gh-agent-worker/private-key.pem" }
+  ],
   "label": "good for agent",
   "pollIntervalSeconds": 60,
   "maxConcurrentIssues": 3,
@@ -127,7 +149,7 @@ Start with `dryRun: true`, label one small issue, and read the log before lettin
 }
 ```
 
-Empty `repos` means every repo the App installation can see.
+Empty `repos` means every repo the App installations can see, which is refused outright if any configured App is public. A legacy top-level `appId` / `privateKeyPath` pair is still accepted and normalized into a single-entry `apps` array.
 
 ## Layout
 
@@ -136,8 +158,8 @@ Code is version controlled here. Runtime data is not, so no secret is ever track
 ```
 ~/.pi/agent/gh-agent-worker/
 ├── config.json          # 600
-├── private-key.pem      # 600, never in git
-├── token-cache.json     # installation token, refreshed hourly
+├── private-key.pem      # 600, never in git (one key per App)
+├── token-cache.json     # tokens keyed <appId>:<installationId>, refreshed hourly
 ├── daemon.pid
 ├── state/               # one JSON per issue, plus .lock files
 │   └── archive/
@@ -152,7 +174,7 @@ Each issue gets a stable pi session id, so planning, implementation, review resp
 
 ## Notes
 
-- Commits and PRs are attributed to `matanlurey-agent[bot]`, not to you. Installation tokens double as git credentials via `x-access-token`.
+- Commits and PRs are attributed to the App's bot user, not to you. Installation tokens double as git credentials via `x-access-token`.
 - Target repos are cloned fresh, so git worktrees are used rather than jj workspaces.
 - Headless runs use `-a` to trust project-local `AGENTS.md` / `CLAUDE.md`, so the agent follows each repo's conventions. Only grant the App repos you're willing to have it read that way.
 - `maxUsdPerIssue` and `maxTurnsPerPhase` are recorded in config but not yet enforced; the wall-clock phase timeout and the CI/review round caps are the budget mechanisms that actually bite today.
