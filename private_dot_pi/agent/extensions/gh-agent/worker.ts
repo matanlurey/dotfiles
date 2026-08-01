@@ -543,9 +543,10 @@ const ALL_STATUS_LABELS = [
 function waitingOn(state: IssueState): string | undefined {
   switch (state.phase) {
     case "awaiting_review":
-      return state.prNumber
-        ? `**Waiting for a human to review and approve #${state.prNumber}.** I won't merge it myself.`
-        : "**Waiting for a human to review.**";
+      if (!state.prNumber) return "**Waiting for a human to review.**";
+      return state.approvedBy
+        ? `**Approved by @${state.approvedBy}. Waiting for a human to merge #${state.prNumber}.** I don't merge my own work.`
+        : `**Waiting for a human to review and approve #${state.prNumber}.** I won't merge it myself.`;
     case "blocked":
       return "**Waiting for a human to answer my question.** Reply on this issue and I'll pick it straight back up.";
     case "paused":

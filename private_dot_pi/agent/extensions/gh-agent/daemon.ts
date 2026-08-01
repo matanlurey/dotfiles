@@ -11,7 +11,7 @@
  */
 
 import fs from "node:fs";
-import { type Config, DAEMON_LOG, DAEMON_PID_FILE, ensureDirs, loadConfig } from "./config.ts";
+import { type Config, DAEMON_PID_FILE, ensureDirs, loadConfig } from "./config.ts";
 import { GitHub } from "./github.ts";
 import {
   acquireLock,
@@ -28,14 +28,14 @@ import {
 } from "./state.ts";
 import { finish, killChildren, pause, publishStatus, step } from "./worker.ts";
 
+/**
+ * Write to stdout only.
+ *
+ * The launcher redirects stdout to DAEMON_LOG, so also appending to that file
+ * here wrote every line twice.
+ */
 function log(msg: string): void {
-  const line = `[${new Date().toISOString()}] ${msg}\n`;
-  process.stdout.write(line);
-  try {
-    fs.appendFileSync(DAEMON_LOG, line);
-  } catch {
-    // Logging must never take the daemon down.
-  }
+  process.stdout.write(`[${new Date().toISOString()}] ${msg}\n`);
 }
 
 function branchFor(cfg: Config, issue: number): string {
@@ -155,7 +155,27 @@ async function reconcile(
       (c) => !bots.includes(c.user.login) && !state.handledReviewCommentIds.includes(c.id),
     );
 
-    if (newReviews.length > 0 || newComments.length > 0) {
+    // A bare approval is not feedback. Answering it would burn a full phase
+    // and invite pointless edits to a change someone just signed off on.
+    const actionable = newReviews.filter(
+      (r) => r.state === "CHANGES_REQUESTED" || (r.body ?? "").trim().length > 0,
+    );
+
+    if (actionable.length === 0 && newComments.length === 0 && newReviews.length > 0) {
+      const approval = newReviews.find((r) => r.state === "APPROVED");
+      state.handledReviewIds.push(...newReviews.map((r) => r.id));
+      if (approval) state.approvedBy = approval.user.login;
+      writeState(state);
+      await publishStatus(state, cfg, gh, log);
+      log(
+        `${state.repo}#${state.issue}: ${newReviews.length} review(s) with no feedback${
+          approval ? ` (approved by @${approval.user.login})` : ""
+        }, nothing to answer`,
+      );
+      return false;
+    }
+
+    if (actionable.length > 0 || newComments.length > 0) {
       if (state.reviewRounds >= cfg.budget.maxReviewRounds) {
         await pause(
           state,
@@ -169,7 +189,7 @@ async function reconcile(
       state.phase = "responding";
       writeState(state);
       log(
-        `${state.repo}#${state.issue}: ${newReviews.length} review(s), ${newComments.length} inline comment(s)`,
+        `${state.repo}#${state.issue}: ${actionable.length} review(s) with feedback, ${newComments.length} inline comment(s)`,
       );
       return true;
     }

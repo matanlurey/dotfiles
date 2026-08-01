@@ -47,6 +47,8 @@ export type IssueState = {
   prTitle: string | null;
   /** Short reviewer-facing PR body proposed by the agent. */
   prBody: string | null;
+  /** Login of whoever approved the PR, so status can say it's ready to merge. */
+  approvedBy: string | null;
   /** pi session id, stable per issue so phases share one conversation. */
   sessionId: string;
   /**
@@ -95,6 +97,7 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     prNumber: raw.prNumber ?? null,
     prTitle: raw.prTitle ?? null,
     prBody: raw.prBody ?? null,
+    approvedBy: raw.approvedBy ?? null,
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
     note: raw.note ?? null,
@@ -157,6 +160,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     prNumber: null,
     prTitle: null,
     prBody: null,
+    approvedBy: null,
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,
     handledCommentIds: [],
