@@ -73,11 +73,40 @@ function statePath(repo: string, issue: number): string {
   return path.join(STATE_DIR, `${key(repo, issue)}.json`);
 }
 
+/**
+ * Fill in fields added after a record was written.
+ *
+ * State files outlive schema changes, so a record written by an older build is
+ * missing newer keys. Without this a new optional field reads as `undefined`
+ * rather than its default, which slips past `!== null` guards.
+ */
+function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueState {
+  const base = newState(repo, issue, raw.branch ?? "");
+  return {
+    ...base,
+    ...raw,
+    // Explicitly normalize nullable fields: JSON has no undefined, so a missing
+    // key must become the documented default rather than leaking undefined.
+    statusCommentId: raw.statusCommentId ?? null,
+    prNumber: raw.prNumber ?? null,
+    worktree: raw.worktree ?? null,
+    lastCiSha: raw.lastCiSha ?? null,
+    note: raw.note ?? null,
+    handledCommentIds: raw.handledCommentIds ?? [],
+    handledReviewIds: raw.handledReviewIds ?? [],
+    handledReviewCommentIds: raw.handledReviewCommentIds ?? [],
+    ciAttempts: raw.ciAttempts ?? 0,
+    reviewRounds: raw.reviewRounds ?? 0,
+    usdSpent: raw.usdSpent ?? 0,
+  };
+}
+
 export function readState(repo: string, issue: number): IssueState | undefined {
   const p = statePath(repo, issue);
   if (!fs.existsSync(p)) return undefined;
   try {
-    return JSON.parse(fs.readFileSync(p, "utf-8")) as IssueState;
+    const raw = JSON.parse(fs.readFileSync(p, "utf-8")) as Partial<IssueState>;
+    return migrate(raw, repo, issue);
   } catch {
     // Corrupt cache: drop it and let the caller rebuild from GitHub.
     fs.rmSync(p, { force: true });
@@ -99,7 +128,11 @@ export function allStates(): IssueState[] {
   for (const f of fs.readdirSync(STATE_DIR)) {
     if (!f.endsWith(".json") || f.endsWith(".tmp")) continue;
     try {
-      out.push(JSON.parse(fs.readFileSync(path.join(STATE_DIR, f), "utf-8")) as IssueState);
+      const raw = JSON.parse(
+        fs.readFileSync(path.join(STATE_DIR, f), "utf-8"),
+      ) as Partial<IssueState>;
+      if (!raw.repo || raw.issue === undefined) continue;
+      out.push(migrate(raw, raw.repo, raw.issue));
     } catch {
       // Skip unreadable records rather than failing the whole listing.
     }
