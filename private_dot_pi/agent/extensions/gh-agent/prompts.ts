@@ -32,6 +32,13 @@ export type Verdict = {
    * shows what changed, so the body only needs to carry why.
    */
   prBody: string | null;
+  /**
+   * Skimmable plan posted on the issue before work starts.
+   *
+   * Separate from `summary` for the same reason as `prBody`: the internal
+   * record is long prose, and nobody wants to read that on an issue.
+   */
+  plan: string | null;
 };
 
 const VERDICT_CONTRACT = `
@@ -40,7 +47,7 @@ const VERDICT_CONTRACT = `
 End your final message with exactly this block, and nothing after it:
 
 ${VERDICT_START}
-{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "summary": "<one paragraph>"}
+{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "plan": <string or null>, "summary": "<one paragraph>"}
 ${VERDICT_END}
 
 Rules for the verdict:
@@ -49,7 +56,7 @@ Rules for the verdict:
 - status "failed" means you could not do the work at all. Explain why in summary.
 - prTitle proposes the pull request title. Check whether the repo enforces a title convention (a Conventional Commits CI check, CONTRIBUTING.md, or the style of recent merged PRs and CHANGELOG entries) and match it, including any breaking-change marker. Leave it null if you have no better title than the issue title.
 - prBody is what a reviewer reads. Keep it under 120 words. The diff already shows what changed, so do not narrate it: no file-by-file walkthrough, no restating the issue, no summary of your own process. Lead with why the change is shaped the way it is, then note anything genuinely non-obvious (a tradeoff you made, a risk, something you deliberately left out), then say what you want looked at most closely. Omit any section you have nothing real to put in it. Plain prose or a couple of short bullets. No headings, no tables, no emoji.
-- summary is the internal record and can be as long as it needs to be. Do not put that text in prBody.
+- summary is the internal record and can be as long as it needs to be. Do not put that text in prBody or plan.
 - Never fabricate progress. If you did not finish, say so.`;
 
 const HOUSE_RULES = `
@@ -84,9 +91,20 @@ ${issueContext(issue, thread)}
 
 1. Explore the repository enough to know exactly where the change belongs.
 2. Decide whether the issue is well specified. If it is ambiguous in a way that would change what you build, that is a needs_help verdict with a specific question.
-3. Write a short plan: the files you will touch, the approach, and how you will verify it.
+3. Fill in \`plan\`. This is posted on the issue for a human to skim in about fifteen seconds, so format it as markdown exactly like this:
 
-Put the plan itself in summary. Keep it under 200 words.
+\`\`\`
+- \`path/to/file.rs\` - what changes there, in one line
+- \`path/to/other.rs\` - likewise
+
+**Not doing:** anything you are deliberately leaving out, and why. Omit this line if there is nothing.
+
+**Verify:** the exact commands you will run.
+\`\`\`
+
+Rules for plan: under 120 words. One bullet per file. No preamble, no restating the issue, no narrating your exploration, no paragraphs of prose. If a decision needs explaining, one short sentence after the bullets.
+
+Put your longer reasoning in summary instead, where it stays out of the issue thread.
 ${HOUSE_RULES}
 ${VERDICT_CONTRACT}`;
 }
@@ -199,6 +217,7 @@ export function parseVerdict(output: string): Verdict {
       question: null,
       prTitle: null,
       prBody: null,
+      plan: null,
       summary: "The run produced no verdict block, so its result cannot be trusted.",
     };
   }
@@ -220,6 +239,10 @@ export function parseVerdict(output: string): Verdict {
         typeof parsed.prBody === "string" && parsed.prBody.trim()
           ? truncateWords(parsed.prBody.trim(), 150)
           : null,
+      plan:
+        typeof parsed.plan === "string" && parsed.plan.trim()
+          ? truncateWords(parsed.plan.trim(), 160)
+          : null,
       summary: typeof parsed.summary === "string" ? parsed.summary : "(no summary)",
     };
   } catch {
@@ -229,6 +252,7 @@ export function parseVerdict(output: string): Verdict {
       question: null,
       prTitle: null,
       prBody: null,
+      plan: null,
       summary: "The verdict block was not valid JSON.",
     };
   }

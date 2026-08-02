@@ -354,6 +354,14 @@ export function describeProgress(sessionDir: string): string {
   return `${p.toolCalls} tool calls, last: ${p.last}`;
 }
 
+/** Cut long prose at a sentence boundary rather than mid-word. */
+function truncate(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const cut = text.slice(0, maxChars);
+  const stop = cut.lastIndexOf(". ");
+  return `${stop > maxChars / 2 ? cut.slice(0, stop + 1) : cut}...`;
+}
+
 function humanDuration(ms: number): string {
   const s = Math.round(ms / 1000);
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
@@ -538,6 +546,7 @@ export async function runPi(
         question: null,
         prTitle: null,
         prBody: null,
+        plan: null,
         summary: `The run hit the ${Math.round(phaseTimeoutMs(cfg) / 60000)} minute phase budget and was stopped.`,
       },
     };
@@ -866,12 +875,19 @@ export async function step(
       state.phase = "implementing";
       writeState(state);
       // The plan is real content, so it gets its own durable comment rather
-      // than being folded into the mutable status comment.
+      // than being folded into the mutable status comment. Prefer the
+      // formatted plan; summary is the long internal record and reads badly
+      // on an issue.
       if (!cfg.dryRun) {
+        const plan = verdict.plan ?? truncate(verdict.summary, 900);
         await gh.comment(
           state.repo,
           state.issue,
-          `Here's my plan (confidence ${verdict.confidence.toFixed(2)}):\n\n${verdict.summary}\n\nStarting work now.${SIG}`,
+          [
+            `**Plan** (confidence ${verdict.confidence.toFixed(2)})`,
+            plan,
+            `Starting work now.${SIG}`,
+          ].join("\n\n"),
         );
       }
       await publishStatus(state, cfg, gh, log);
