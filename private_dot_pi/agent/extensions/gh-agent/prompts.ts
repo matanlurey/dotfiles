@@ -151,6 +151,7 @@ export function reviewResponsePrompt(
   issue: Issue,
   reviews: Review[],
   comments: ReviewComment[],
+  conversation: string[] = [],
 ): string {
   const ids = comments.map((c) => c.id);
   const reviewText = reviews
@@ -165,7 +166,13 @@ export function reviewResponsePrompt(
     )
     .join("\n\n");
 
-  return `A human reviewed your pull request for issue #${issue.number}. Address their feedback.
+  return `A human responded to your pull request for issue #${issue.number}. Address what they said.
+
+${
+    conversation.length
+      ? `## Comments addressed to you\n\nThese were left on the issue or the pull request conversation. Treat them as direct instructions and do what they ask.\n\n${conversation.join("\n\n")}`
+      : ""
+  }
 
 ${reviewText ? `## Review summaries\n\n${reviewText}` : ""}
 
@@ -175,7 +182,7 @@ ${inline ? `## Inline comments\n\n${inline}` : ""}
 
 1. Address every point. If you disagree with a point, implement nothing for it and say so plainly rather than silently ignoring it.
 2. Make the edits in the working tree. The harness commits them as a new commit on top, so reviewers keep their context. Never amend or force-push.
-3. Fill in \`replies\`: one entry per inline comment above, using its exact comment id${ids.length ? ` (${ids.join(", ")})` : ""}. Each reply is posted directly into that reviewer's thread, so write it as a direct answer to that one comment.
+3. Fill in \`replies\`: one entry per inline comment above, using its exact comment id${ids.length ? ` (${ids.join(", ")})` : ""}. Comments in "Comments addressed to you" have no id and get answered in \`summary\` instead, which is posted as a reply on the pull request when there is nothing to reply to inline. Each reply is posted directly into that reviewer's thread, so write it as a direct answer to that one comment.
 
 Rules for each reply body: at most three sentences. Say what you changed, or that you disagree and why, in the first sentence. No preamble, no thanking, no restating their comment back at them, no summarizing the whole PR. If they asked a question, answer it directly.
 

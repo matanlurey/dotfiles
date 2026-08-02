@@ -1116,7 +1116,9 @@ export async function step(
       );
       const inlineToAnswer = comments.filter((c) => !bots.includes(c.user.login));
 
-      if (substantive.length === 0 && inlineToAnswer.length === 0) {
+      const conversation = state.pendingComments;
+
+      if (substantive.length === 0 && inlineToAnswer.length === 0 && conversation.length === 0) {
         state.handledReviewIds.push(...reviews.map((r) => r.id));
         state.handledReviewCommentIds.push(...comments.map((c) => c.id));
         const approval = reviews.find((r) => r.state === "APPROVED");
@@ -1131,12 +1133,14 @@ export async function step(
       }
 
       const { verdict } = await runPi(
-        reviewResponsePrompt(issue, substantive, inlineToAnswer),
+        reviewResponsePrompt(issue, substantive, inlineToAnswer, conversation),
         state,
         cfg,
         gh,
         log,
       );
+      // Consumed; don't replay them on a later round.
+      state.pendingComments = [];
 
       // Mark handled regardless of outcome so one bad round can't loop forever.
       state.handledReviewIds.push(...reviews.map((r) => r.id));
@@ -1175,8 +1179,8 @@ export async function step(
           log(`replied inline to ${answered.size} comment(s) on PR #${prNumber}`);
         }
 
-        // Only fall back to a PR-level comment when there was nothing to reply
-        // to inline, so the two never duplicate each other.
+        // Fall back to a PR-level comment when there was nothing to reply to
+        // inline, which is also how a conversation comment gets an answer.
         if (answered.size === 0) {
           const fallback = verdict.replies[0]?.body ?? truncate(stripVerdict(verdict.summary), 600);
           await gh.comment(

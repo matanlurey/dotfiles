@@ -12,6 +12,7 @@
 
 import fs from "node:fs";
 import { type Config, DAEMON_PID_FILE, ensureDirs, loadConfig } from "./config.ts";
+import type { Comment } from "./github.ts";
 import { GitHub } from "./github.ts";
 import {
   acquireLock,
@@ -117,14 +118,32 @@ async function reconcile(
   // each other's comments as human input.
   const bots = await gh.botLogins();
 
-  // A human answering a blocked question is what unblocks it.
-  if (state.phase === "blocked") {
-    const comments = await gh.issueComments(state.repo, state.issue);
-    const fresh = comments.filter(
+  /**
+   * New human comments on the issue and on the PR's conversation tab.
+   *
+   * GitHub stores PR conversation comments as issue comments on the PR number,
+   * so they need a separate fetch. Only watching the issue meant a comment
+   * addressed to the agent on its own PR was silently ignored.
+   */
+  async function freshHumanComments(): Promise<{ issue: Comment[]; pr: Comment[] }> {
+    const onIssue = (await gh.issueComments(state.repo, state.issue)).filter(
       (c) => !bots.includes(c.user.login) && !state.handledCommentIds.includes(c.id),
     );
+    const onPr = state.prNumber
+      ? (await gh.issueComments(state.repo, state.prNumber)).filter(
+          (c) => !bots.includes(c.user.login) && !state.handledPrCommentIds.includes(c.id),
+        )
+      : [];
+    return { issue: onIssue, pr: onPr };
+  }
+
+  // A human answering a blocked question is what unblocks it.
+  if (state.phase === "blocked") {
+    const { issue: onIssue, pr: onPr } = await freshHumanComments();
+    const fresh = [...onIssue, ...onPr];
     if (fresh.length === 0) return false;
-    state.handledCommentIds.push(...fresh.map((c) => c.id));
+    state.handledCommentIds.push(...onIssue.map((c) => c.id));
+    state.handledPrCommentIds.push(...onPr.map((c) => c.id));
     // Resume where we left off: before a PR exists we re-plan, after it we treat
     // the answer as review-style feedback.
     state.phase = state.prNumber === null ? "planning" : "responding";
@@ -155,11 +174,38 @@ async function reconcile(
       (c) => !bots.includes(c.user.login) && !state.handledReviewCommentIds.includes(c.id),
     );
 
+    // A comment addressed to the agent counts as feedback even without a
+    // formal review attached.
+    const { issue: onIssue, pr: onPr } = await freshHumanComments();
+    const conversation = [...onIssue, ...onPr];
+
     // A bare approval is not feedback. Answering it would burn a full phase
     // and invite pointless edits to a change someone just signed off on.
     const actionable = newReviews.filter(
       (r) => r.state === "CHANGES_REQUESTED" || (r.body ?? "").trim().length > 0,
     );
+
+    if (conversation.length > 0) {
+      if (state.reviewRounds >= cfg.budget.maxReviewRounds) {
+        await pause(
+          state,
+          gh,
+          cfg,
+          `I've been through ${state.reviewRounds} rounds on this, which is my limit.`,
+          log,
+        );
+        return false;
+      }
+      state.handledCommentIds.push(...onIssue.map((c) => c.id));
+      state.handledPrCommentIds.push(...onPr.map((c) => c.id));
+      state.pendingComments = conversation.map((c) => `@${c.user.login}: ${c.body}`);
+      state.phase = "responding";
+      writeState(state);
+      log(
+        `${state.repo}#${state.issue}: ${conversation.length} conversation comment(s) to address`,
+      );
+      return true;
+    }
 
     if (actionable.length === 0 && newComments.length === 0 && newReviews.length > 0) {
       const approval = newReviews.find((r) => r.state === "APPROVED");

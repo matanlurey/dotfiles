@@ -63,6 +63,13 @@ export type IssueState = {
   lastPush: { sha: string; kind: string; at: string } | null;
   /** Who review was requested from, so it isn't requested repeatedly. */
   reviewRequestedFrom: string[];
+  /**
+   * Conversation comments queued for the next responding run.
+   *
+   * Carried through state because reconcile finds them but the worker is what
+   * renders the prompt.
+   */
+  pendingComments: string[];
   /** pi session id, stable per issue so phases share one conversation. */
   sessionId: string;
   /**
@@ -72,6 +79,8 @@ export type IssueState = {
   statusCommentId: number | null;
   /** Comment ids already processed, so the worker never answers twice. */
   handledCommentIds: number[];
+  /** Conversation-tab comments on the PR, which are issue comments on its number. */
+  handledPrCommentIds: number[];
   handledReviewIds: number[];
   handledReviewCommentIds: number[];
   /** Head SHA whose CI result we already reacted to. */
@@ -117,10 +126,12 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     followUpsFiled: raw.followUpsFiled ?? [],
     lastPush: raw.lastPush ?? null,
     reviewRequestedFrom: raw.reviewRequestedFrom ?? [],
+    pendingComments: raw.pendingComments ?? [],
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
     note: raw.note ?? null,
     handledCommentIds: raw.handledCommentIds ?? [],
+    handledPrCommentIds: raw.handledPrCommentIds ?? [],
     handledReviewIds: raw.handledReviewIds ?? [],
     handledReviewCommentIds: raw.handledReviewCommentIds ?? [],
     ciAttempts: raw.ciAttempts ?? 0,
@@ -185,9 +196,11 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     followUpsFiled: [],
     lastPush: null,
     reviewRequestedFrom: [],
+    pendingComments: [],
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,
     handledCommentIds: [],
+    handledPrCommentIds: [],
     handledReviewIds: [],
     handledReviewCommentIds: [],
     lastCiSha: null,
