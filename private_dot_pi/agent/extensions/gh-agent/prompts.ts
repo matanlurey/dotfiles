@@ -67,6 +67,7 @@ Rules for the verdict:
 - status "needs_help" means a human must answer something before you can proceed correctly. Set question to the exact question to post on the issue. Ask about intent, requirements, or tradeoffs. Never ask a question you can answer yourself by reading the repo.
 - status "failed" means you could not do the work at all. Explain why in summary.
 - prTitle proposes the pull request title. Check whether the repo enforces a title convention (a Conventional Commits CI check, CONTRIBUTING.md, or the style of recent merged PRs and CHANGELOG entries) and match it, including any breaking-change marker. Leave it null if you have no better title than the issue title.
+- If you deviated from something the issue explicitly specified, especially a public API name or signature, say so in the first sentence of prBody and give the reason. A reviewer should never have to diff the issue against your PR to discover you renamed what they asked for.
 - prBody is what a reviewer reads. Keep it under 120 words. The diff already shows what changed, so do not narrate it: no file-by-file walkthrough, no restating the issue, no summary of your own process. Lead with why the change is shaped the way it is, then note anything genuinely non-obvious (a tradeoff you made, a risk, something you deliberately left out), then say what you want looked at most closely. Omit any section you have nothing real to put in it. Plain prose or a couple of short bullets. No headings, no tables, no emoji.
 - summary is the internal record and can be as long as it needs to be. Do not put that text in prBody or plan.
 - followUps is for genuine problems you found but deliberately did not fix, because they are outside this issue's scope. Each needs a title written the way a maintainer would write it, and a body of a few sentences: what is wrong, where, and why it matters. At most three, and only things you would defend in review. An empty list is the normal case. Do not propose speculative cleanups, restatements of this issue, or work you already did.
@@ -337,9 +338,20 @@ export function parseVerdict(output: string): Verdict {
   }
 }
 
+/**
+ * Trim to a word budget, preferring a sentence boundary.
+ *
+ * Cutting mid-sentence leaves a dangling fragment in a PR body, which reads
+ * worse than simply stopping a sentence early.
+ */
 function truncateWords(text: string, maxWords: number): string {
   const words = text.split(/\s+/);
-  return words.length <= maxWords ? text : `${words.slice(0, maxWords).join(" ")}...`;
+  if (words.length <= maxWords) return text;
+  const cut = words.slice(0, maxWords).join(" ");
+  const stop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".\n"));
+  // Only honor the boundary if it keeps most of the budget; otherwise the
+  // result would be uselessly short.
+  return stop > cut.length * 0.6 ? cut.slice(0, stop + 1) : `${cut}...`;
 }
 
 /** Strip the verdict block so it never leaks into a GitHub comment. */

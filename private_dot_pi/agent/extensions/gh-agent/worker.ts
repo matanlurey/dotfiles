@@ -997,7 +997,16 @@ export async function step(
       if (verdict.prTitle || verdict.prBody) writeState(state);
       await fileFollowUps(state, cfg, gh, verdict, log);
 
-      const committed = await commitAll(wt, `${issue.title}\n\nCloses #${issue.number}`);
+      // Subject describes what was built, not what was requested. The agent
+      // sometimes deviates for good reason (a better API name than the issue
+      // proposed), and prTitle reflects the change while issue.title reflects
+      // the ask. Using the ask produces commits advertising APIs that aren't
+      // in the diff.
+      const subject = state.prTitle ?? issue.title;
+      const committed = await commitAll(
+        wt,
+        `${subject}\n\n${state.prBody ? `${state.prBody}\n\n` : ""}Closes #${issue.number}`,
+      );
       if (!committed) {
         await block(
           state,
