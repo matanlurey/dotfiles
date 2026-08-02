@@ -1,8 +1,9 @@
 ---
 description: Review new comments left during the audit - investigate each and either file an issue or fix it locally.
 deterministic:
-  script: ./audit-scripts/audit.mjs
-  args: ["pending-comments"]
+  script:
+    path: ./audit-scripts/audit.mjs
+    args: ["pending-comments"]
   handoff: on-success
 ---
 Each pending comment above has an `intent` (parsed from its own leading prefix - see the `hunk-audit` skill for the prefix syntax):
