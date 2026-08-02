@@ -56,6 +56,11 @@ export type IssueState = {
   mergeAttempts: number;
   /** Follow-up issues already filed, to avoid refiling the same one. */
   followUpsFiled: string[];
+  /**
+   * The last commit this agent pushed, so the status comment can say what it
+   * just did rather than only what phase it is in.
+   */
+  lastPush: { sha: string; kind: string; at: string } | null;
   /** Who review was requested from, so it isn't requested repeatedly. */
   reviewRequestedFrom: string[];
   /** pi session id, stable per issue so phases share one conversation. */
@@ -110,6 +115,7 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     timeouts: raw.timeouts ?? 0,
     mergeAttempts: raw.mergeAttempts ?? 0,
     followUpsFiled: raw.followUpsFiled ?? [],
+    lastPush: raw.lastPush ?? null,
     reviewRequestedFrom: raw.reviewRequestedFrom ?? [],
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
@@ -177,6 +183,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     timeouts: 0,
     mergeAttempts: 0,
     followUpsFiled: [],
+    lastPush: null,
     reviewRequestedFrom: [],
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,

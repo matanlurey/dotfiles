@@ -258,7 +258,13 @@ async function commitAll(wt: string, message: string): Promise<boolean> {
  * Push the issue branch. Force-push is never used: reviewers keep their
  * "viewed" markers and inline comments stay anchored.
  */
-async function push(state: IssueState, gh: GitHub, cfg: Config, log: Logger): Promise<void> {
+async function push(
+  state: IssueState,
+  gh: GitHub,
+  cfg: Config,
+  log: Logger,
+  kind = "work",
+): Promise<void> {
   if (cfg.dryRun) {
     log(`[dry-run] would push ${state.branch}`);
     return;
@@ -273,6 +279,15 @@ async function push(state: IssueState, gh: GitHub, cfg: Config, log: Logger): Pr
     { cwd: wt, timeoutMs: 5 * 60 * 1000 },
   );
   if (res.code !== 0) throw new Error(`push failed: ${scrub(res.stderr)}`);
+
+  // Record what this push was for so the status comment can report one line
+  // per commit instead of only naming the current phase.
+  state.lastPush = {
+    sha: (await headSha(wt)).slice(0, 7),
+    kind,
+    at: new Date().toISOString(),
+  };
+  writeState(state);
 }
 
 async function headSha(wt: string): Promise<string> {
@@ -596,6 +611,14 @@ const ALL_STATUS_LABELS = [
  * Stated explicitly so nobody has to infer from a phase name whether the ball
  * is in their court.
  */
+/** One line describing the most recent push, for the status comment. */
+function lastPushLine(state: IssueState): string | undefined {
+  if (!state.lastPush) return undefined;
+  const { sha, kind, at } = state.lastPush;
+  const when = at.replace("T", " ").slice(0, 16);
+  return `Last push: \`${sha}\` (${kind}) at ${when}Z.`;
+}
+
 function waitingOn(state: IssueState): string | undefined {
   switch (state.phase) {
     case "awaiting_review":
@@ -650,6 +673,7 @@ export async function publishStatus(
     `${STATUS_MARKER}\n**Agent status: ${state.phase.replace(/_/g, " ")}**`,
     waiting ?? detail ?? entry.blurb,
     waiting && detail ? detail : "",
+    lastPushLine(state) ?? "",
     state.prNumber && !waiting ? `Pull request: #${state.prNumber}` : "",
     `<sub>Branch \`${state.branch}\`. Updated ${new Date().toISOString().replace("T", " ").slice(0, 16)}Z.` +
       ` Remove the \`${cfg.label}\` label to stop me.</sub>`,
@@ -1018,7 +1042,7 @@ export async function step(
         return;
       }
 
-      await push(state, gh, cfg, log);
+      await push(state, gh, cfg, log, "implementation");
       state.note = verdict.summary;
       state.phase = "pr_open";
       writeState(state);
@@ -1035,7 +1059,7 @@ export async function step(
       // Don't assume the implementing phase pushed. It may have been skipped
       // (dry run at the time) or interrupted. Pushing again is a no-op.
       await ensureWorktree(state, cfg, gh, log);
-      await push(state, gh, cfg, log);
+      await push(state, gh, cfg, log, "implementation");
       const base = await gh.defaultBranch(state.repo);
       // Body carries why; the diff already shows what. state.note is the long
       // internal record and deliberately does not go in here.
@@ -1079,8 +1103,35 @@ export async function step(
         (c) => !state.handledReviewCommentIds.includes(c.id),
       );
 
+      // Never run the model on an empty prompt.
+      //
+      // A bare approval, or a review whose points were all answered in an
+      // earlier round, leaves nothing to render. The agent then correctly
+      // reports that it was given no feedback, and blocks on a question no
+      // human can act on, which also stops conflict handling from ever
+      // running again for that PR.
+      const bots = await gh.botLogins();
+      const substantive = reviews.filter(
+        (r) => !bots.includes(r.user.login) && (r.body ?? "").trim().length > 0,
+      );
+      const inlineToAnswer = comments.filter((c) => !bots.includes(c.user.login));
+
+      if (substantive.length === 0 && inlineToAnswer.length === 0) {
+        state.handledReviewIds.push(...reviews.map((r) => r.id));
+        state.handledReviewCommentIds.push(...comments.map((c) => c.id));
+        const approval = reviews.find((r) => r.state === "APPROVED");
+        if (approval) state.approvedBy = approval.user.login;
+        state.phase = "awaiting_review";
+        writeState(state);
+        await publishStatus(state, cfg, gh, log);
+        log(
+          `${state.repo}#${state.issue}: review round had no actionable content, not running the model`,
+        );
+        return;
+      }
+
       const { verdict } = await runPi(
-        reviewResponsePrompt(issue, reviews, comments),
+        reviewResponsePrompt(issue, substantive, inlineToAnswer),
         state,
         cfg,
         gh,
@@ -1102,7 +1153,7 @@ export async function step(
         wt,
         `Address review feedback\n\nRe: PR #${prNumber}`,
       );
-      if (committed) await push(state, gh, cfg, log);
+      if (committed) await push(state, gh, cfg, log, "review feedback");
 
       if (!cfg.dryRun) {
         // Answer inside the reviewer's own thread. A detached top-level
@@ -1156,7 +1207,8 @@ export async function step(
         cfg,
         gh,
         log,
-        `\`${base}\` moved on and this branch no longer merges cleanly. Working through it.`,
+        `Merging \`origin/${base}\` into \`${state.branch}\` (attempt ${state.mergeAttempts}). ` +
+          `Merging rather than rebasing, so your inline comments stay anchored.`,
       );
 
       // Merge rather than rebase: rebasing rewrites history and needs a force
@@ -1166,11 +1218,17 @@ export async function step(
       const merge = await exec("git", ["merge", "--no-edit", `origin/${base}`], { cwd: wt });
 
       if (merge.code === 0) {
-        await push(state, gh, cfg, log);
+        await push(state, gh, cfg, log, "merge with base");
         state.phase = "awaiting_review";
         state.mergeAttempts = 0;
         writeState(state);
-        await publishStatus(state, cfg, gh, log);
+        await publishStatus(
+          state,
+          cfg,
+          gh,
+          log,
+          `Merged \`origin/${base}\` in cleanly, no conflicts.`,
+        );
         log(`merged ${base} into ${state.branch} cleanly`);
         return;
       }
@@ -1274,7 +1332,7 @@ export async function step(
         await block(state, gh, cfg, `Couldn't finish the merge commit: ${scrub(commit.stderr)}`, log);
         return;
       }
-      await push(state, gh, cfg, log);
+      await push(state, gh, cfg, log, "conflict resolution");
       state.phase = "awaiting_review";
       state.mergeAttempts = 0;
       writeState(state);
@@ -1328,7 +1386,7 @@ export async function step(
 
       const committed = await commitAll(wt, `Fix CI\n\n${verdict.summary.slice(0, 200)}`);
       if (committed) {
-        await push(state, gh, cfg, log);
+        await push(state, gh, cfg, log, "CI fix");
         state.lastCiSha = await headSha(wt);
       }
       state.phase = "awaiting_review";
