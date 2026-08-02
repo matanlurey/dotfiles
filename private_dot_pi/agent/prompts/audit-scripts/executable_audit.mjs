@@ -164,16 +164,34 @@ function sessionSelector(ledger) {
 	return ledger.hunkSessionId ? [ledger.hunkSessionId] : ["--repo", ledger.repoRoot];
 }
 
-function hunkReload(ledger, files) {
-	return tryRun("hunk", ["session", "reload", ...sessionSelector(ledger), "--", "diff", ledger.diffTarget, "--", ...files]);
+// A pinned hunkSessionId goes stale the moment that Hunk window closes -
+// closing sessions, restarting a machine, or just quitting the terminal all
+// do this. Retrying with --repo on exactly that failure means a dead pinned
+// id self-heals (or clearly reports ambiguity/no-session) instead of failing
+// forever until someone manually edits the ledger.
+const STALE_SESSION_ID_ERROR = /No active session matches sessionId/;
+
+function withSessionFallback(ledger, root, invoke) {
+	const usedPinnedId = Boolean(ledger.hunkSessionId);
+	const result = invoke(sessionSelector(ledger));
+	if (result.ok || !usedPinnedId || !STALE_SESSION_ID_ERROR.test(result.stderr)) return result;
+
+	const retry = invoke(["--repo", root]);
+	ledger.hunkSessionId = retry.ok ? resolveSessionId(root) : null;
+	writeJson(ledgerPath(root, ledger.targetSlug), ledger);
+	return retry;
 }
 
-function hunkCommentList(ledger) {
-	return tryRun("hunk", ["session", "comment", "list", ...sessionSelector(ledger), "--type", "user", "--json"]);
+function hunkReload(ledger, root, files) {
+	return withSessionFallback(ledger, root, (selector) => tryRun("hunk", ["session", "reload", ...selector, "--", "diff", ledger.diffTarget, "--", ...files]));
 }
 
-function hunkCommentAdd(ledger, { file, sideFlag, line, summary, author }) {
-	return tryRun("hunk", ["session", "comment", "add", ...sessionSelector(ledger), "--file", file, sideFlag, line, "--summary", summary, "--author", author]);
+function hunkCommentList(ledger, root) {
+	return withSessionFallback(ledger, root, (selector) => tryRun("hunk", ["session", "comment", "list", ...selector, "--type", "user", "--json"]));
+}
+
+function hunkCommentAdd(ledger, root, { file, sideFlag, line, summary, author }) {
+	return withSessionFallback(ledger, root, (selector) => tryRun("hunk", ["session", "comment", "add", ...selector, "--file", file, sideFlag, line, "--summary", summary, "--author", author]));
 }
 
 // Resolves a bare --repo match into one concrete session id so every later
@@ -272,7 +290,7 @@ function cmdInit(args) {
 
 	let hunkResult;
 	if (firstPending !== -1) {
-		hunkResult = hunkReload(ledger, ledger.batches[firstPending].files);
+		hunkResult = hunkReload(ledger, root, ledger.batches[firstPending].files);
 		if (hunkResult.ok && !ledger.hunkSessionId) {
 			ledger.hunkSessionId = resolveSessionId(root);
 			writeJson(ledgerPath(root, slug), ledger);
@@ -293,7 +311,7 @@ function cmdNext() {
 	let hunkResult;
 	if (nextIdx !== -1) {
 		ledger.activeBatch = nextIdx;
-		hunkResult = hunkReload(ledger, ledger.batches[nextIdx].files);
+		hunkResult = hunkReload(ledger, root, ledger.batches[nextIdx].files);
 	}
 	ledger.updatedAt = new Date().toISOString();
 	writeJson(ledgerPath(root, ledger.targetSlug), ledger);
@@ -319,7 +337,7 @@ function cmdPendingComments() {
 		return;
 	}
 
-	const listResult = hunkCommentList(ledger);
+	const listResult = hunkCommentList(ledger, root);
 	if (!listResult.ok) {
 		console.log(`Could not read Hunk comments: ${listResult.stderr.trim()}`);
 		process.exitCode = 1;
@@ -384,10 +402,10 @@ function cmdMarkTriaged(args) {
 	// in scope is addressable; the next /audit-next or /audit-status naturally
 	// re-narrows to the correct active batch, so there's no need to restore it here.
 	const allFiles = ledger.batches.flatMap((b) => b.files);
-	hunkReload(ledger, allFiles);
+	hunkReload(ledger, root, allFiles);
 
 	const sideFlag = flags.side === "old" ? "--old-line" : "--new-line";
-	const addResult = hunkCommentAdd(ledger, { file: flags.file, sideFlag, line: flags.line, summary, author: `triage:${status}` });
+	const addResult = hunkCommentAdd(ledger, root, { file: flags.file, sideFlag, line: flags.line, summary, author: `triage:${status}` });
 	console.log(addResult.ok ? `Recorded ${status} for ${commentId}.` : `Recorded ${status} for ${commentId}, but the Hunk annotation failed: ${addResult.stderr.trim()}`);
 }
 
