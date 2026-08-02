@@ -225,6 +225,24 @@ async function reconcile(
         log(`could not mark PR ready: ${(e as Error).message}`);
       }
     }
+
+    // Reviewers may not have been requestable while it was a draft.
+    if (!cfg.dryRun && state.reviewRequestedFrom.length === 0 && !pr.draft) {
+      const issue = await gh.getIssue(state.repo, state.issue);
+      const wanted = cfg.reviewers?.length ? cfg.reviewers : [issue.user.login];
+      try {
+        const assignable = await gh.assignableFrom(state.repo, wanted);
+        if (assignable.length > 0) {
+          await gh.requestReview(state.repo, prNumber, assignable);
+          await gh.addAssignees(state.repo, prNumber, assignable);
+          state.reviewRequestedFrom = assignable;
+          writeState(state);
+          log(`requested review from ${assignable.join(", ")} on PR #${prNumber}`);
+        }
+      } catch (e) {
+        log(`review request failed: ${(e as Error).message}`);
+      }
+    }
     return false;
   }
 

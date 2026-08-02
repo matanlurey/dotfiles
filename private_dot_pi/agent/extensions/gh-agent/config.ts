@@ -15,6 +15,12 @@ export type Budget = {
   maxTurnsPerPhase: number;
   /** How many times to retry a red CI pipeline before giving up. */
   maxCiFixAttempts: number;
+  /**
+   * Consecutive phase timeouts before the agent stops instead of asking again.
+   * A timeout is not a question a human can answer, so retrying it unchanged
+   * just burns the budget again.
+   */
+  maxTimeouts: number;
   /** How many review rounds to answer before requiring a human. */
   maxReviewRounds: number;
   /** Spend ceiling per issue. Zero disables the check. */
@@ -44,9 +50,23 @@ export type Config = {
    * installed on, which is already a GitHub-enforced allowlist.
    */
   repos: string[];
-  /** Model passed to headless pi runs. */
+  /** Default model for headless pi runs. */
   model: string;
+  /**
+   * Per-phase overrides, e.g. { "ci_fixing": "anthropic/claude-haiku-4-5" }.
+   * Anything omitted uses `model`.
+   */
+  modelByPhase: Record<string, string>;
+  /**
+   * Model to retry with after a phase times out or fails.
+   *
+   * Retrying an identical run at the same tier reproduces the same failure, so
+   * a struggling phase escalates instead. Empty disables escalation.
+   */
+  escalationModel: string;
   thinking: string;
+  /** Thinking level used with escalationModel. */
+  escalationThinking: string;
   budget: Budget;
   /** Plan and report actions without writing to GitHub or pushing. */
   dryRun: boolean;
@@ -61,6 +81,13 @@ export type Config = {
    * immediately.
    */
   openPrAsDraft: boolean;
+  /**
+   * Who to request review from, and assign, once a PR needs a human.
+   * Empty falls back to the issue's author.
+   */
+  reviewers: string[];
+  /** Wall-clock ceiling for a single phase. The hard budget. */
+  phaseTimeoutMinutes: number;
 };
 
 export const ROOT = path.join(os.homedir(), ".pi", "agent", "gh-agent-worker");
@@ -79,16 +106,22 @@ const DEFAULTS: Omit<Config, "apps"> = {
   maxConcurrentIssues: 3,
   repos: [],
   model: "anthropic/claude-sonnet-5",
+  modelByPhase: {},
+  escalationModel: "anthropic/claude-opus-4-8",
   thinking: "medium",
+  escalationThinking: "high",
   budget: {
     maxTurnsPerPhase: 40,
     maxCiFixAttempts: 3,
     maxReviewRounds: 10,
     maxUsdPerIssue: 5,
+    maxTimeouts: 2,
   },
   dryRun: false,
   branchPrefix: "agent/",
   openPrAsDraft: true,
+  reviewers: [],
+  phaseTimeoutMinutes: 25,
 };
 
 export function ensureDirs(): void {

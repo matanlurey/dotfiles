@@ -522,6 +522,47 @@ export class GitHub {
     return this.request<PullRequest>(`/repos/${repo}/pulls/${number}`);
   }
 
+  /**
+   * Ask specific people to review, and assign them.
+   *
+   * The App's own bot cannot be assigned to anything, so this is how a PR gets
+   * into a human's review queue and their assigned list.
+   */
+  async requestReview(repo: string, number: number, logins: string[]): Promise<void> {
+    if (this.#cfg.dryRun || logins.length === 0) return;
+    try {
+      await this.request(`/repos/${repo}/pulls/${number}/requested_reviewers`, {
+        method: "POST",
+        body: { reviewers: logins },
+      });
+    } catch (e) {
+      // 422 means they can't be a reviewer (they authored it, or lack access).
+      if (!(e instanceof GitHubError && e.status === 422)) throw e;
+    }
+  }
+
+  async addAssignees(repo: string, issue: number, logins: string[]): Promise<void> {
+    if (this.#cfg.dryRun || logins.length === 0) return;
+    await this.request(`/repos/${repo}/issues/${issue}/assignees`, {
+      method: "POST",
+      body: { assignees: logins },
+    });
+  }
+
+  /** Filter to logins GitHub will actually accept as an assignee. */
+  async assignableFrom(repo: string, logins: string[]): Promise<string[]> {
+    const ok: string[] = [];
+    for (const login of logins) {
+      try {
+        await this.request(`/repos/${repo}/assignees/${encodeURIComponent(login)}`);
+        ok.push(login);
+      } catch {
+        // Bots and non-collaborators cannot be assigned.
+      }
+    }
+    return ok;
+  }
+
   async updatePrTitle(repo: string, number: number, title: string): Promise<void> {
     if (this.#cfg.dryRun) return;
     await this.request(`/repos/${repo}/pulls/${number}`, {

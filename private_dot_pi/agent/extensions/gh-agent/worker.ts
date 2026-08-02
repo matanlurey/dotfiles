@@ -31,8 +31,10 @@ import { archive, type IssueState, type Phase, writeState } from "./state.ts";
 /** Minimum self-reported confidence to advance out of each phase. */
 const THRESHOLD = { planning: 0.6, implementing: 0.5, responding: 0.5, ci_fixing: 0.5 };
 
-/** Wall-clock ceiling per phase. This is the hard budget; prompts state it too. */
-const PHASE_TIMEOUT_MS = 25 * 60 * 1000;
+/** Fallback when config omits phaseTimeoutMinutes. */
+function phaseTimeoutMs(cfg: Config): number {
+  return (cfg.phaseTimeoutMinutes ?? 25) * 60 * 1000;
+}
 
 export type Logger = (msg: string) => void;
 
@@ -46,14 +48,28 @@ export type ExecResult = { code: number; stdout: string; stderr: string };
  */
 const children = new Set<ReturnType<typeof spawn>>();
 
-export function killChildren(): void {
-  for (const c of children) {
+/**
+ * Kill a child and everything it spawned.
+ *
+ * Signalling only the direct child leaves its descendants (cargo, rustc)
+ * running and holding the stdio pipes open, so the run keeps going past its
+ * budget. Each child is its own process group leader, so the negative pid
+ * signals the whole tree.
+ */
+function killTree(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
+  try {
+    if (child.pid) process.kill(-child.pid, signal);
+  } catch {
     try {
-      c.kill("SIGTERM");
+      child.kill(signal);
     } catch {
       // Already gone.
     }
   }
+}
+
+export function killChildren(): void {
+  for (const c of children) killTree(c, "SIGTERM");
   children.clear();
 }
 
@@ -73,6 +89,8 @@ export function exec(
       cwd: opts.cwd,
       env: { ...process.env, ...opts.env },
       stdio: ["ignore", "pipe", "pipe"],
+      // Own process group, so a timeout can kill descendants too.
+      detached: true,
     });
     children.add(child);
     let stdout = "";
@@ -80,8 +98,13 @@ export function exec(
     let timer: NodeJS.Timeout | undefined;
     if (opts.timeoutMs) {
       timer = setTimeout(() => {
-        child.kill("SIGKILL");
         stderr += `\n[killed after ${opts.timeoutMs}ms]`;
+        killTree(child, "SIGKILL");
+        // Descendants can keep the pipes open past the kill; don't wait on them.
+        setTimeout(() => {
+          children.delete(child);
+          resolve({ code: -1, stdout, stderr });
+        }, 5000);
       }, opts.timeoutMs);
     }
     child.stdout.on("data", (d) => {
@@ -360,7 +383,7 @@ async function updateProgressComment(
 
   const body = [
     `${STATUS_MARKER}\n**Agent status: ${state.phase.replace(/_/g, " ")}**`,
-    `Working for ${humanDuration(elapsedMs)} of a ${Math.round(PHASE_TIMEOUT_MS / 60000)} minute budget.`,
+    `Working for ${humanDuration(elapsedMs)} of a ${Math.round(phaseTimeoutMs(cfg) / 60000)} minute budget.`,
     [
       `| | |`,
       `|---|---|`,
@@ -392,6 +415,23 @@ async function updateProgressComment(
  * responses and CI fixes all share one conversation and the agent remembers
  * its own earlier reasoning.
  */
+/**
+ * Pick the model for this run.
+ *
+ * A phase that already timed out or failed once escalates, because rerunning
+ * the same prompt on the same model reproduces the same failure. Otherwise a
+ * per-phase override wins, then the default.
+ */
+export function modelFor(state: IssueState, cfg: Config): { model: string; thinking: string } {
+  if (state.timeouts > 0 && cfg.escalationModel) {
+    return { model: cfg.escalationModel, thinking: cfg.escalationThinking ?? cfg.thinking };
+  }
+  return {
+    model: cfg.modelByPhase?.[state.phase] ?? cfg.model,
+    thinking: cfg.thinking,
+  };
+}
+
 export async function runPi(
   prompt: string,
   state: IssueState,
@@ -403,13 +443,14 @@ export async function runPi(
   const sessionDir = path.join(LOG_DIR, "sessions", `${state.repo.replace("/", "__")}__${state.issue}`);
   fs.mkdirSync(sessionDir, { recursive: true });
 
+  const { model, thinking } = modelFor(state, cfg);
   const args = [
     "-p",
     prompt,
     "--model",
-    cfg.model,
+    model,
     "--thinking",
-    cfg.thinking,
+    thinking,
     "--session-id",
     state.sessionId,
     "--session-dir",
@@ -449,7 +490,9 @@ export async function runPi(
   const sink = fs.createWriteStream(logFile, { flags: "a" });
   sink.write(`$ pi ${args.join(" ")}\n\n`);
 
-  log(`running pi (${cfg.model}) in ${wt}`);
+  log(
+    `running pi (${model}${state.timeouts > 0 ? `, escalated after ${state.timeouts} timeout(s)` : ""}) in ${wt}`,
+  );
   log(`  live log: ${logFile}`);
   const started = Date.now();
 
@@ -459,7 +502,7 @@ export async function runPi(
   const heartbeat = setInterval(() => {
     ticks += 1;
     const elapsed = Date.now() - started;
-    const budget = Math.round(PHASE_TIMEOUT_MS / 60000);
+    const budget = Math.round(phaseTimeoutMs(cfg) / 60000);
     log(
       `  still working (${Math.round(elapsed / 60000)}/${budget} min): ${describeProgress(sessionDir)}`,
     );
@@ -472,7 +515,7 @@ export async function runPi(
   try {
     res = await exec("pi", args, {
       cwd: wt,
-      timeoutMs: PHASE_TIMEOUT_MS,
+      timeoutMs: phaseTimeoutMs(cfg),
       env: sanitizedEnv,
       onData: (chunk) => sink.write(chunk),
     });
@@ -495,7 +538,7 @@ export async function runPi(
         question: null,
         prTitle: null,
         prBody: null,
-        summary: `The run hit the ${Math.round(PHASE_TIMEOUT_MS / 60000)} minute phase budget and was stopped.`,
+        summary: `The run hit the ${Math.round(phaseTimeoutMs(cfg) / 60000)} minute phase budget and was stopped.`,
       },
     };
   }
@@ -624,6 +667,85 @@ export async function publishStatus(
   }
 }
 
+/**
+ * A phase timeout is not a question a human can answer.
+ *
+ * Asking "could you clarify?" after running out of time invites a reply that
+ * starts the same 25 minute run again, unchanged. Repeated timeouts mean the
+ * issue is too large for one phase, so say that and stop.
+ *
+ * Returns true when the caller should stop handling this phase.
+ */
+async function handleTimeout(
+  state: IssueState,
+  cfg: Config,
+  gh: GitHub,
+  timedOut: boolean,
+  phaseName: string,
+  log: Logger,
+): Promise<boolean> {
+  if (!timedOut) return false;
+
+  state.timeouts += 1;
+  writeState(state);
+  const budget = cfg.phaseTimeoutMinutes ?? 25;
+
+  if (state.timeouts >= (cfg.budget.maxTimeouts ?? 2)) {
+    await pause(
+      state,
+      gh,
+      cfg,
+      `I've run out of time during ${phaseName} ${state.timeouts} times in a row (${budget} minutes each), so I'm stopping rather than burning another run on the same thing.\n\n` +
+        `This usually means the issue is too big for one pass. Splitting it into smaller issues would let me finish, or raise \`phaseTimeoutMinutes\` if it's genuinely just long.`,
+      log,
+    );
+    return true;
+  }
+
+  await block(
+    state,
+    gh,
+    cfg,
+    `I ran out of time during ${phaseName} after ${budget} minutes, so I have nothing I'd trust to show you.\n\n` +
+      `I'll try once more if you reply, but if this issue covers a lot of ground it may be worth splitting up. ` +
+      `Narrowing the scope in a comment would also help.`,
+    log,
+  );
+  return true;
+}
+
+/**
+ * Put the PR in a human's review queue.
+ *
+ * The bot cannot assign itself, and an unassigned PR from a bot is easy to
+ * miss, so review is requested from the configured reviewers (falling back to
+ * whoever filed the issue) and they are assigned too.
+ */
+async function requestHumanReview(
+  state: IssueState,
+  cfg: Config,
+  gh: GitHub,
+  issueAuthor: string,
+  log: Logger,
+): Promise<void> {
+  if (cfg.dryRun || !state.prNumber) return;
+  const wanted = cfg.reviewers?.length ? cfg.reviewers : [issueAuthor];
+  try {
+    const assignable = await gh.assignableFrom(state.repo, wanted);
+    if (assignable.length === 0) {
+      log(`no assignable reviewers among ${wanted.join(", ")}`);
+      return;
+    }
+    await gh.requestReview(state.repo, state.prNumber, assignable);
+    await gh.addAssignees(state.repo, state.prNumber, assignable);
+    state.reviewRequestedFrom = assignable;
+    writeState(state);
+    log(`requested review from ${assignable.join(", ")} on PR #${state.prNumber}`);
+  } catch (e) {
+    log(`review request failed: ${(e as Error).message}`);
+  }
+}
+
 /** Clear agent labels when the agent is done with an issue. */
 async function clearStatusLabels(state: IssueState, cfg: Config, gh: GitHub): Promise<void> {
   if (cfg.dryRun) return;
@@ -714,7 +836,15 @@ export async function step(
       const thread = comments
         .map((c) => `**@${c.user.login}**: ${c.body}`)
         .join("\n\n");
-      const { verdict } = await runPi(planningPrompt(issue, thread), state, cfg, gh, log);
+      const { verdict, timedOut } = await runPi(
+        planningPrompt(issue, thread),
+        state,
+        cfg,
+        gh,
+        log,
+      );
+
+      if (await handleTimeout(state, cfg, gh, timedOut, "planning", log)) return;
 
       if (verdict.status === "needs_help" && verdict.question) {
         await block(state, gh, cfg, verdict.question, log);
@@ -730,6 +860,7 @@ export async function step(
         );
         return;
       }
+      state.timeouts = 0;
 
       state.note = verdict.summary;
       state.phase = "implementing";
@@ -751,7 +882,16 @@ export async function step(
       const wt = await ensureWorktree(state, cfg, gh, log);
       await publishStatus(state, cfg, gh, log);
       const plan = state.note ?? "(plan unavailable, re-derive from the issue)";
-      const { verdict } = await runPi(implementPrompt(issue, plan), state, cfg, gh, log);
+      const { verdict, timedOut } = await runPi(
+        implementPrompt(issue, plan),
+        state,
+        cfg,
+        gh,
+        log,
+      );
+
+      if (await handleTimeout(state, cfg, gh, timedOut, "implementation", log)) return;
+      state.timeouts = 0;
 
       if (verdict.status === "needs_help" && verdict.question) {
         await block(state, gh, cfg, verdict.question, log);
@@ -830,6 +970,7 @@ export async function step(
           ? `Opened ${pr.html_url} as a draft. I'll mark it ready for review once checks pass.${SIG}`
           : `Opened ${pr.html_url}.${SIG}`,
       );
+      await requestHumanReview(state, cfg, gh, issue.user.login, log);
       await publishStatus(state, cfg, gh, log);
       log(`opened PR #${pr.number} for ${state.repo}#${state.issue}`);
       return;

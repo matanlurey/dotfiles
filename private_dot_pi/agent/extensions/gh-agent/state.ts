@@ -49,6 +49,10 @@ export type IssueState = {
   prBody: string | null;
   /** Login of whoever approved the PR, so status can say it's ready to merge. */
   approvedBy: string | null;
+  /** Consecutive phase timeouts. Reset by any phase that completes. */
+  timeouts: number;
+  /** Who review was requested from, so it isn't requested repeatedly. */
+  reviewRequestedFrom: string[];
   /** pi session id, stable per issue so phases share one conversation. */
   sessionId: string;
   /**
@@ -98,6 +102,8 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     prTitle: raw.prTitle ?? null,
     prBody: raw.prBody ?? null,
     approvedBy: raw.approvedBy ?? null,
+    timeouts: raw.timeouts ?? 0,
+    reviewRequestedFrom: raw.reviewRequestedFrom ?? [],
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
     note: raw.note ?? null,
@@ -161,6 +167,8 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     prTitle: null,
     prBody: null,
     approvedBy: null,
+    timeouts: 0,
+    reviewRequestedFrom: [],
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,
     handledCommentIds: [],
