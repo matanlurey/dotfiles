@@ -193,6 +193,33 @@ ${HOUSE_RULES}
 ${VERDICT_CONTRACT}`;
 }
 
+export function conflictPrompt(
+  issue: Issue,
+  baseBranch: string,
+  conflicted: string[],
+  diffContext: string,
+): string {
+  return `Your pull request for issue #${issue.number} conflicts with \`${baseBranch}\`. The harness has already started a merge, and these files are left with conflict markers for you to resolve.
+
+## Conflicted files
+
+${conflicted.map((f) => `- ${f}`).join("\n")}
+
+${diffContext ? `## What changed on ${baseBranch}\n\n\`\`\`\n${diffContext.slice(0, 8000)}\n\`\`\`` : ""}
+
+## Your task
+
+Resolve every conflict by editing the files. Remove all conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`).
+
+Keep both sides' intent. The other side is work that already landed on ${baseBranch}, so do not discard it to make your change apply cleanly, and do not discard your change either. If the two are genuinely incompatible, that is a needs_help verdict explaining the incompatibility.
+
+Do not run any git command. The harness completes the merge commit once you are done. Re-run the project's build or tests afterwards to confirm the resolution actually compiles.
+
+In summary, say how you resolved each conflict.
+${HOUSE_RULES}
+${VERDICT_CONTRACT}`;
+}
+
 export function questionAnswerPrompt(issue: Issue, thread: string, answer: string): string {
   return `You previously asked a question on issue #${issue.number} and a human has answered. Resume work.
 

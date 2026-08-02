@@ -194,8 +194,35 @@ async function reconcile(
       return true;
     }
 
-    // No review activity: check whether CI needs attention.
     const pr = await gh.getPr(state.repo, prNumber);
+
+    // A branch that no longer merges is dead in the water until it catches up,
+    // and no amount of CI fixing changes that, so handle it first.
+    //
+    // mergeable is computed lazily and is null until GitHub finishes, which is
+    // not the same as conflicted; leave those for a later cycle.
+    const conflicted = pr.mergeable === false || pr.mergeable_state === "dirty";
+    const behind = pr.mergeable_state === "behind";
+    if (conflicted || behind) {
+      if (state.mergeAttempts >= 3) {
+        await pause(
+          state,
+          gh,
+          cfg,
+          `I've tried ${state.mergeAttempts} times to reconcile this branch with its base and it still doesn't merge. It needs a human.`,
+          log,
+        );
+        return false;
+      }
+      state.phase = "merging";
+      writeState(state);
+      log(
+        `${state.repo}#${state.issue}: PR #${prNumber} is ${conflicted ? "conflicted" : "behind"} (${pr.mergeable_state})`,
+      );
+      return true;
+    }
+
+    // No review activity: check whether CI needs attention.
     const checks = await gh.checks(state.repo, pr.head.sha);
 
     if (checks.conclusion === "failure" && state.lastCiSha !== pr.head.sha) {

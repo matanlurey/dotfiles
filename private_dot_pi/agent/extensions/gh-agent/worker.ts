@@ -18,6 +18,7 @@ import { LOG_DIR, REPO_CACHE_DIR, WORKTREE_DIR } from "./config.ts";
 import type { GitHub } from "./github.ts";
 import {
   ciFixPrompt,
+  conflictPrompt,
   implementPrompt,
   parseVerdict,
   planningPrompt,
@@ -570,6 +571,7 @@ const STATUS_MARKER = "<!-- gh-agent-status -->";
 /** Phase -> the label shown on the issue, and how it reads to a human. */
 const STATUS_LABEL: Partial<Record<Phase, { label: string; color: string; blurb: string }>> = {
   claimed: { label: "agent:working", color: "1D76DB", blurb: "Picking this up." },
+  merging: { label: "agent:working", color: "1D76DB", blurb: "Catching up with the base branch." },
   planning: { label: "agent:working", color: "1D76DB", blurb: "Reading the code and working out a plan." },
   implementing: { label: "agent:working", color: "1D76DB", blurb: "Writing the change." },
   pr_open: { label: "agent:working", color: "1D76DB", blurb: "Opening a pull request." },
@@ -1066,6 +1068,122 @@ export async function step(
       writeState(state);
       await publishStatus(state, cfg, gh, log);
       log(`answered review round ${state.reviewRounds} on PR #${prNumber}`);
+      return;
+    }
+
+    case "merging": {
+      const wt = await ensureWorktree(state, cfg, gh, log);
+      const base = await gh.defaultBranch(state.repo);
+      state.mergeAttempts += 1;
+      writeState(state);
+
+      await publishStatus(
+        state,
+        cfg,
+        gh,
+        log,
+        `\`${base}\` moved on and this branch no longer merges cleanly. Working through it.`,
+      );
+
+      // Merge rather than rebase: rebasing rewrites history and needs a force
+      // push, which would orphan inline comments and reset "viewed" markers.
+      const clone = repoCachePath(state.repo);
+      await gitAuthed(state.repo, gh, ["fetch", "--quiet", "origin", base], { cwd: clone });
+      const merge = await exec("git", ["merge", "--no-edit", `origin/${base}`], { cwd: wt });
+
+      if (merge.code === 0) {
+        await push(state, gh, cfg, log);
+        state.phase = "awaiting_review";
+        state.mergeAttempts = 0;
+        writeState(state);
+        await publishStatus(state, cfg, gh, log);
+        log(`merged ${base} into ${state.branch} cleanly`);
+        return;
+      }
+
+      const conflicted = (
+        await exec("git", ["diff", "--name-only", "--diff-filter=U"], { cwd: wt })
+      ).stdout
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (conflicted.length === 0) {
+        // Merge failed for some reason other than conflicts; don't leave the
+        // tree half-merged.
+        await exec("git", ["merge", "--abort"], { cwd: wt });
+        await block(
+          state,
+          gh,
+          cfg,
+          `I couldn't merge \`${base}\` into this branch and it wasn't a content conflict:\n\n\`\`\`\n${scrub(merge.stderr).slice(0, 600)}\n\`\`\``,
+          log,
+        );
+        return;
+      }
+
+      log(`${conflicted.length} conflicted file(s): ${conflicted.join(", ")}`);
+      const baseLog = (
+        await exec("git", ["log", "--oneline", `HEAD..origin/${base}`], { cwd: wt })
+      ).stdout;
+
+      const { verdict, timedOut } = await runPi(
+        conflictPrompt(issue, base, conflicted, baseLog),
+        state,
+        cfg,
+        gh,
+        log,
+      );
+
+      if (timedOut || verdict.status !== "ok") {
+        await exec("git", ["merge", "--abort"], { cwd: wt });
+        await block(
+          state,
+          gh,
+          cfg,
+          `I couldn't resolve the conflicts with \`${base}\` myself.\n\n${verdict.summary}\n\nConflicted files:\n${conflicted.map((f) => `- \`${f}\``).join("\n")}`,
+          log,
+        );
+        return;
+      }
+
+      const leftover = (
+        await exec("git", ["diff", "--name-only", "--diff-filter=U"], { cwd: wt })
+      ).stdout.trim();
+      if (leftover) {
+        await exec("git", ["merge", "--abort"], { cwd: wt });
+        await block(
+          state,
+          gh,
+          cfg,
+          `I tried to resolve the merge with \`${base}\` but left conflict markers in:\n${leftover
+            .split("\n")
+            .map((f) => `- \`${f}\``)
+            .join("\n")}`,
+          log,
+        );
+        return;
+      }
+
+      await exec("git", ["add", "-A"], { cwd: wt });
+      const commit = await exec("git", ["commit", "--no-edit"], { cwd: wt });
+      if (commit.code !== 0) {
+        await block(state, gh, cfg, `Couldn't finish the merge commit: ${scrub(commit.stderr)}`, log);
+        return;
+      }
+      await push(state, gh, cfg, log);
+      state.phase = "awaiting_review";
+      state.mergeAttempts = 0;
+      writeState(state);
+      await publishStatus(state, cfg, gh, log);
+      if (!cfg.dryRun) {
+        await gh.comment(
+          state.repo,
+          state.prNumber as number,
+          `Merged \`${base}\` in and resolved the conflicts.\n\n${truncate(verdict.summary, 500)}${SIG}`,
+        );
+      }
+      log(`resolved ${conflicted.length} conflict(s) with ${base}`);
       return;
     }
 

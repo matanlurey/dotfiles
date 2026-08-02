@@ -31,6 +31,7 @@ export type Phase =
   | "awaiting_review"
   | "responding"
   | "ci_fixing"
+  | "merging"
   | "blocked"
   | "paused"
   | "done"
@@ -51,6 +52,8 @@ export type IssueState = {
   approvedBy: string | null;
   /** Consecutive phase timeouts. Reset by any phase that completes. */
   timeouts: number;
+  /** Conflict resolution attempts, so a hopeless merge can't loop. */
+  mergeAttempts: number;
   /** Who review was requested from, so it isn't requested repeatedly. */
   reviewRequestedFrom: string[];
   /** pi session id, stable per issue so phases share one conversation. */
@@ -103,6 +106,7 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     prBody: raw.prBody ?? null,
     approvedBy: raw.approvedBy ?? null,
     timeouts: raw.timeouts ?? 0,
+    mergeAttempts: raw.mergeAttempts ?? 0,
     reviewRequestedFrom: raw.reviewRequestedFrom ?? [],
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
@@ -168,6 +172,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     prBody: null,
     approvedBy: null,
     timeouts: 0,
+    mergeAttempts: 0,
     reviewRequestedFrom: [],
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,

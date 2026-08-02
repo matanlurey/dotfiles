@@ -45,6 +45,13 @@ export type PullRequest = {
   head: { sha: string; ref: string };
   base: { ref: string };
   html_url: string;
+  /**
+   * GitHub computes this in the background; it is null until ready, which is
+   * not the same as "conflicted".
+   */
+  mergeable: boolean | null;
+  /** "clean", "dirty" (conflicts), "behind", "blocked", "unknown", ... */
+  mergeable_state: string;
 };
 
 export type Review = {
