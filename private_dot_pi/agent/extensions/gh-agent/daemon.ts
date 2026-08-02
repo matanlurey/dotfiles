@@ -27,7 +27,7 @@ import {
   releaseLock,
   writeState,
 } from "./state.ts";
-import { finish, killChildren, pause, publishStatus, step } from "./worker.ts";
+import { finish, killChildren, pause, publishQueued, publishStatus, step } from "./worker.ts";
 
 /**
  * Write to stdout only.
@@ -370,7 +370,20 @@ async function cycle(cfg: Config, gh: GitHub): Promise<void> {
   // starving whatever was claimed first.
   ready.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const batch = ready.slice(0, cfg.maxConcurrentIssues);
-  log(`stepping ${batch.length} issue(s) (${ready.length} ready)`);
+  const waiting = ready.slice(cfg.maxConcurrentIssues);
+  log(
+    `stepping ${batch.length} issue(s), ${waiting.length} waiting for a slot (${ready.length} ready)`,
+  );
+
+  // Anything ready but not picked is waiting, not working. Saying otherwise
+  // makes agent:working useless for telling which issues are actually live.
+  for (const [i, state] of waiting.entries()) {
+    try {
+      await publishQueued(state, cfg, new GitHub(cfg), i + 1, waiting.length, log);
+    } catch (e) {
+      log(`could not mark ${state.repo}#${state.issue} queued: ${(e as Error).message}`);
+    }
+  }
 
   await Promise.all(
     batch.map(async (state) => {

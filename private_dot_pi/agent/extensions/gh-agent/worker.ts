@@ -600,10 +600,46 @@ const STATUS_LABEL: Partial<Record<Phase, { label: string; color: string; blurb:
 
 const ALL_STATUS_LABELS = [
   "agent:working",
+  "agent:queued",
   "agent:in-review",
   "agent:needs-input",
   "agent:paused",
 ];
+
+/**
+ * Mark an issue as started but not currently progressing.
+ *
+ * Concurrency is bounded, so most in-flight issues are waiting for a slot at
+ * any moment. Leaving them labelled agent:working overstates what is happening
+ * and makes the label useless for telling which issues are live.
+ */
+export async function publishQueued(
+  state: IssueState,
+  cfg: Config,
+  gh: GitHub,
+  position: number,
+  total: number,
+  log: Logger,
+): Promise<void> {
+  if (cfg.dryRun || state.statusLabel === "agent:queued") return;
+  try {
+    await gh.ensureLabel(
+      state.repo,
+      "agent:queued",
+      "C5DEF5",
+      "Started by the agent, waiting for a worker slot",
+    );
+    for (const stale of ALL_STATUS_LABELS) {
+      if (stale !== "agent:queued") await gh.removeLabel(state.repo, state.issue, stale);
+    }
+    await gh.addLabels(state.repo, state.issue, ["agent:queued"]);
+    state.statusLabel = "agent:queued";
+    writeState(state);
+    log(`${state.repo}#${state.issue} queued (${position}/${total})`);
+  } catch (e) {
+    log(`queue label failed: ${(e as Error).message}`);
+  }
+}
 
 /**
  * What the agent is waiting on, when it is waiting on a person.
@@ -657,14 +693,24 @@ export async function publishStatus(
     return;
   }
 
-  try {
-    await gh.ensureLabel(state.repo, entry.label, entry.color, "Set by the autonomous issue agent");
-    for (const stale of ALL_STATUS_LABELS) {
-      if (stale !== entry.label) await gh.removeLabel(state.repo, state.issue, stale);
+  // Skip the label churn when nothing changed; a deep queue makes this the
+  // difference between a handful of API calls per cycle and hundreds.
+  if (state.statusLabel !== entry.label) {
+    try {
+      await gh.ensureLabel(
+        state.repo,
+        entry.label,
+        entry.color,
+        "Set by the autonomous issue agent",
+      );
+      for (const stale of ALL_STATUS_LABELS) {
+        if (stale !== entry.label) await gh.removeLabel(state.repo, state.issue, stale);
+      }
+      await gh.addLabels(state.repo, state.issue, [entry.label]);
+      state.statusLabel = entry.label;
+    } catch (e) {
+      log(`status label failed: ${(e as Error).message}`);
     }
-    await gh.addLabels(state.repo, state.issue, [entry.label]);
-  } catch (e) {
-    log(`status label failed: ${(e as Error).message}`);
   }
 
   const waiting = waitingOn(state);
@@ -855,6 +901,7 @@ async function clearStatusLabels(state: IssueState, cfg: Config, gh: GitHub): Pr
       // Best effort.
     }
   }
+  state.statusLabel = null;
 }
 
 async function block(

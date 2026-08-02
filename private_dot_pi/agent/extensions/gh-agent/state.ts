@@ -70,6 +70,12 @@ export type IssueState = {
    * renders the prompt.
    */
   pendingComments: string[];
+  /**
+   * The agent:* label last published, so a cycle can skip the API calls when
+   * nothing changed. With a deep queue that is the difference between a few
+   * requests and a few hundred per poll.
+   */
+  statusLabel: string | null;
   /** pi session id, stable per issue so phases share one conversation. */
   sessionId: string;
   /**
@@ -127,6 +133,7 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     lastPush: raw.lastPush ?? null,
     reviewRequestedFrom: raw.reviewRequestedFrom ?? [],
     pendingComments: raw.pendingComments ?? [],
+    statusLabel: raw.statusLabel ?? null,
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
     note: raw.note ?? null,
@@ -197,6 +204,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     lastPush: null,
     reviewRequestedFrom: [],
     pendingComments: [],
+    statusLabel: null,
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,
     handledCommentIds: [],
