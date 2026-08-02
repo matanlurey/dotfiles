@@ -44,7 +44,9 @@ Every headless run must end with a machine-readable verdict:
 
 The daemon parses it and escalates rather than guessing. A missing or malformed block counts as zero confidence, so a truncated or confused run asks for help instead of opening a PR. Confidence thresholds: 0.6 to leave planning, 0.5 for the rest.
 
-The verdict is also the agent's only channel for GitHub-side requests. It has no credentials, so `prTitle` is how it asks for a PR title matching the repo's convention (many repos gate CI on a Conventional Commits title). Agent proposes, harness disposes.
+The verdict is also the agent's only channel for GitHub-side requests, since it has no credentials. `prTitle` asks for a PR title matching the repo's convention, `replies` answers each inline review comment in its own thread, and `followUps` proposes issues for real problems found outside the current scope. Agent proposes, harness disposes.
+
+Follow-up issues are filed unlabelled, capped at three per issue, deduplicated against open issues with the same title, and never carry the watched label, so the agent cannot queue its own work.
 
 ### Progress reporting
 

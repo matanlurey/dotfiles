@@ -44,6 +44,13 @@ export type Verdict = {
    * rather than as one detached comment on the pull request.
    */
   replies: { commentId: number; body: string }[];
+  /**
+   * Out-of-scope problems worth tracking, filed as real issues by the harness.
+   *
+   * Without this the agent either scope-creeps into fixing them or buries them
+   * in a roadmap file nobody reads.
+   */
+  followUps: { title: string; body: string }[];
 };
 
 const VERDICT_CONTRACT = `
@@ -52,7 +59,7 @@ const VERDICT_CONTRACT = `
 End your final message with exactly this block, and nothing after it:
 
 ${VERDICT_START}
-{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "plan": <string or null>, "replies": [{"commentId": <number>, "body": "<short>"}], "summary": "<one paragraph>"}
+{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "plan": <string or null>, "replies": [{"commentId": <number>, "body": "<short>"}], "followUps": [{"title": "<short>", "body": "<short>"}], "summary": "<one paragraph>"}
 ${VERDICT_END}
 
 Rules for the verdict:
@@ -62,6 +69,7 @@ Rules for the verdict:
 - prTitle proposes the pull request title. Check whether the repo enforces a title convention (a Conventional Commits CI check, CONTRIBUTING.md, or the style of recent merged PRs and CHANGELOG entries) and match it, including any breaking-change marker. Leave it null if you have no better title than the issue title.
 - prBody is what a reviewer reads. Keep it under 120 words. The diff already shows what changed, so do not narrate it: no file-by-file walkthrough, no restating the issue, no summary of your own process. Lead with why the change is shaped the way it is, then note anything genuinely non-obvious (a tradeoff you made, a risk, something you deliberately left out), then say what you want looked at most closely. Omit any section you have nothing real to put in it. Plain prose or a couple of short bullets. No headings, no tables, no emoji.
 - summary is the internal record and can be as long as it needs to be. Do not put that text in prBody or plan.
+- followUps is for genuine problems you found but deliberately did not fix, because they are outside this issue's scope. Each needs a title written the way a maintainer would write it, and a body of a few sentences: what is wrong, where, and why it matters. At most three, and only things you would defend in review. An empty list is the normal case. Do not propose speculative cleanups, restatements of this issue, or work you already did.
 - Never fabricate progress. If you did not finish, say so.`;
 
 const HOUSE_RULES = `
@@ -72,6 +80,7 @@ const HOUSE_RULES = `
 - Follow the repository's own conventions. Read AGENTS.md / CLAUDE.md / CONTRIBUTING.md if present and obey them.
 - Match the surrounding code style. Do not reformat unrelated code.
 - Do not touch CI config, release tooling, dependency pins, or secrets unless the issue explicitly asks.
+- If you notice a real problem outside this issue's scope, do not fix it, and do not record it in a roadmap, TODO, or docs file. Propose it in \`followUps\` and the harness files it as a proper issue on your behalf.
 - Do not create, amend, or push git commits yourself, and never run destructive git commands (reset --hard, push --force, branch -D). The harness handles all git operations.
 - If tests exist, run them. If a test command is documented, use it.
 - Prefer the smallest change that fully solves the issue.`;
@@ -254,6 +263,7 @@ export function parseVerdict(output: string): Verdict {
       prBody: null,
       plan: null,
       replies: [],
+      followUps: [],
       summary: "The run produced no verdict block, so its result cannot be trusted.",
     };
   }
@@ -281,6 +291,22 @@ export function parseVerdict(output: string): Verdict {
           : null,
       // Inline replies must stay short; a wall of text in a code thread is
       // worse than in a comment because it buries the diff.
+      followUps: Array.isArray(parsed.followUps)
+        ? (parsed.followUps as { title?: unknown; body?: unknown }[])
+            .filter(
+              (f) =>
+                typeof f?.title === "string" &&
+                f.title.trim().length > 0 &&
+                typeof f?.body === "string" &&
+                f.body.trim().length > 0,
+            )
+            // Three is plenty; more than that is noise, not signal.
+            .slice(0, 3)
+            .map((f) => ({
+              title: (f.title as string).replace(/\s+/g, " ").trim().slice(0, 100),
+              body: truncateWords((f.body as string).trim(), 120),
+            }))
+        : [],
       replies: Array.isArray(parsed.replies)
         ? (parsed.replies as { commentId?: unknown; body?: unknown }[])
             .filter(
@@ -305,6 +331,7 @@ export function parseVerdict(output: string): Verdict {
       prBody: null,
       plan: null,
       replies: [],
+      followUps: [],
       summary: "The verdict block was not valid JSON.",
     };
   }

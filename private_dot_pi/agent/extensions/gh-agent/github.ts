@@ -510,6 +510,39 @@ export class GitHub {
     }
   }
 
+  /**
+   * File a new issue.
+   *
+   * Deliberately takes no labels. Applying the watched label here would let the
+   * agent queue its own work and never stop.
+   */
+  async createIssue(
+    repo: string,
+    title: string,
+    body: string,
+  ): Promise<{ number: number; html_url: string } | undefined> {
+    if (this.#cfg.dryRun) return undefined;
+    return this.request<{ number: number; html_url: string }>(`/repos/${repo}/issues`, {
+      method: "POST",
+      body: { title, body },
+    });
+  }
+
+  /** Open issues with this exact title, used to avoid filing duplicates. */
+  async findOpenIssueByTitle(repo: string, title: string): Promise<number | undefined> {
+    const q = encodeURIComponent(`repo:${repo} is:issue is:open in:title "${title}"`);
+    try {
+      const res = await this.request<{ items: { number: number; title: string }[] }>(
+        `/search/issues?q=${q}&per_page=20`,
+      );
+      return res.items.find((i) => i.title.trim() === title.trim())?.number;
+    } catch {
+      // Search is rate limited separately; treating a failure as "not found"
+      // risks a duplicate, which is better than dropping the report.
+      return undefined;
+    }
+  }
+
   async defaultBranch(repo: string): Promise<string> {
     const r = await this.request<{ default_branch: string }>(`/repos/${repo}`);
     return r.default_branch;

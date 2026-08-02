@@ -30,8 +30,13 @@ mutating `git`/`jj` at the tool-call level. This is why "never auto-merge" and
 "never force-push" are true by construction rather than by asking the model.
 
 If the agent needs something on GitHub, it asks through the verdict and the
-harness performs it. That is what `prTitle` and `replies` are for. Add new
-fields the same way rather than handing the agent credentials.
+harness performs it. That is what `prTitle`, `replies`, and `followUps` are
+for. Add new fields the same way rather than handing the agent credentials.
+
+Anything the harness creates on the agent's behalf must not be able to feed
+work back to the agent. Follow-up issues are filed without labels for exactly
+this reason: applying the watched label would let the agent queue itself
+forever. Keep that property when adding capabilities.
 
 **Every headless run must return a verdict.** A missing or malformed block
 parses as confidence 0 and status `failed`, so a truncated or confused run
@@ -117,6 +122,10 @@ and `rustc` grandchildren holding the stdio pipes, so a 25 minute budget ran
   comments and resets reviewers' viewed markers.
 - A phase that timed out retries on `escalationModel`, because rerunning the
   same prompt on the same model reproduces the same failure.
+- Denying a capability without offering a replacement just moves the behavior
+  somewhere worse. Stripping credentials stopped the agent filing issues, so it
+  wrote its findings into `docs/ROADMAP.md` instead. `followUps` gave it a
+  sanctioned channel and the prompt now forbids the workaround explicitly.
 - Measured across 11 runs, successful phases have a median around 90s. Do not
   add speculative model downgrades without data; the runs that cost money are
   the ones that fail, and those want a stronger model.

@@ -549,6 +549,7 @@ export async function runPi(
         prBody: null,
         plan: null,
         replies: [],
+        followUps: [],
         summary: `The run hit the ${Math.round(phaseTimeoutMs(cfg) / 60000)} minute phase budget and was stopped.`,
       },
     };
@@ -758,6 +759,68 @@ async function requestHumanReview(
   }
 }
 
+/**
+ * File the agent's proposed follow-up issues.
+ *
+ * The agent has no credentials, so without this it either scope-creeps into
+ * fixing unrelated problems or buries them in a docs file. Filed issues are
+ * deliberately unlabelled: applying the watched label would let the agent
+ * queue its own work forever.
+ *
+ * Best effort. A failure here must never affect the change under review.
+ */
+async function fileFollowUps(
+  state: IssueState,
+  cfg: Config,
+  gh: GitHub,
+  verdict: Verdict,
+  log: Logger,
+): Promise<void> {
+  if (verdict.followUps.length === 0) return;
+
+  // Cap per issue across all phases, not just per run.
+  const remaining = 3 - state.followUpsFiled.length;
+  if (remaining <= 0) {
+    log(`follow-up cap reached for ${state.repo}#${state.issue}, skipping`);
+    return;
+  }
+
+  for (const f of verdict.followUps.slice(0, remaining)) {
+    const fingerprint = f.title.toLowerCase().trim();
+    if (state.followUpsFiled.includes(fingerprint)) continue;
+
+    if (cfg.dryRun) {
+      log(`[dry-run] would file follow-up: ${f.title}`);
+      state.followUpsFiled.push(fingerprint);
+      continue;
+    }
+
+    try {
+      const existing = await gh.findOpenIssueByTitle(state.repo, f.title);
+      if (existing !== undefined) {
+        log(`follow-up already open as #${existing}, not refiling`);
+        state.followUpsFiled.push(fingerprint);
+        continue;
+      }
+      const origin = state.prNumber
+        ? `#${state.issue} (via #${state.prNumber})`
+        : `#${state.issue}`;
+      const created = await gh.createIssue(
+        state.repo,
+        f.title,
+        `${f.body}\n\n<sub>Noticed by the issue agent while working on ${origin}, and left alone as out of scope. Unlabelled on purpose: label it if you want it picked up.</sub>`,
+      );
+      if (created) {
+        state.followUpsFiled.push(fingerprint);
+        log(`filed follow-up #${created.number}: ${f.title}`);
+      }
+    } catch (e) {
+      log(`could not file follow-up "${f.title}": ${(e as Error).message}`);
+    }
+  }
+  writeState(state);
+}
+
 /** Clear agent labels when the agent is done with an issue. */
 async function clearStatusLabels(state: IssueState, cfg: Config, gh: GitHub): Promise<void> {
   if (cfg.dryRun) return;
@@ -932,6 +995,7 @@ export async function step(
       if (verdict.prTitle) state.prTitle = verdict.prTitle;
       if (verdict.prBody) state.prBody = verdict.prBody;
       if (verdict.prTitle || verdict.prBody) writeState(state);
+      await fileFollowUps(state, cfg, gh, verdict, log);
 
       const committed = await commitAll(wt, `${issue.title}\n\nCloses #${issue.number}`);
       if (!committed) {
@@ -1063,6 +1127,7 @@ export async function step(
         }
       }
 
+      await fileFollowUps(state, cfg, gh, verdict, log);
       state.phase = "awaiting_review";
       state.note = null;
       writeState(state);

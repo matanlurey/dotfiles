@@ -54,6 +54,8 @@ export type IssueState = {
   timeouts: number;
   /** Conflict resolution attempts, so a hopeless merge can't loop. */
   mergeAttempts: number;
+  /** Follow-up issues already filed, to avoid refiling the same one. */
+  followUpsFiled: string[];
   /** Who review was requested from, so it isn't requested repeatedly. */
   reviewRequestedFrom: string[];
   /** pi session id, stable per issue so phases share one conversation. */
@@ -107,6 +109,7 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     approvedBy: raw.approvedBy ?? null,
     timeouts: raw.timeouts ?? 0,
     mergeAttempts: raw.mergeAttempts ?? 0,
+    followUpsFiled: raw.followUpsFiled ?? [],
     reviewRequestedFrom: raw.reviewRequestedFrom ?? [],
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
@@ -173,6 +176,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     approvedBy: null,
     timeouts: 0,
     mergeAttempts: 0,
+    followUpsFiled: [],
     reviewRequestedFrom: [],
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,
