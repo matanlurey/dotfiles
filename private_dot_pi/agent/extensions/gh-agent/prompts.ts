@@ -39,6 +39,11 @@ export type Verdict = {
    * record is long prose, and nobody wants to read that on an issue.
    */
   plan: string | null;
+  /**
+   * Per-comment answers, posted as inline replies in the reviewer's own thread
+   * rather than as one detached comment on the pull request.
+   */
+  replies: { commentId: number; body: string }[];
 };
 
 const VERDICT_CONTRACT = `
@@ -47,7 +52,7 @@ const VERDICT_CONTRACT = `
 End your final message with exactly this block, and nothing after it:
 
 ${VERDICT_START}
-{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "plan": <string or null>, "summary": "<one paragraph>"}
+{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "plan": <string or null>, "replies": [{"commentId": <number>, "body": "<short>"}], "summary": "<one paragraph>"}
 ${VERDICT_END}
 
 Rules for the verdict:
@@ -136,6 +141,7 @@ export function reviewResponsePrompt(
   reviews: Review[],
   comments: ReviewComment[],
 ): string {
+  const ids = comments.map((c) => c.id);
   const reviewText = reviews
     .filter((r) => r.body?.trim())
     .map((r) => `### Review from @${r.user.login} (${r.state})\n\n${r.body}`)
@@ -156,11 +162,13 @@ ${inline ? `## Inline comments\n\n${inline}` : ""}
 
 ## Your task
 
-1. Address every point. If you disagree with a point, implement nothing for it and explain your reasoning in summary rather than silently ignoring it.
+1. Address every point. If you disagree with a point, implement nothing for it and say so plainly rather than silently ignoring it.
 2. Make the edits in the working tree. The harness commits them as a new commit on top, so reviewers keep their context. Never amend or force-push.
-3. If a comment asks a question rather than requesting a change, answer it in summary.
+3. Fill in \`replies\`: one entry per inline comment above, using its exact comment id${ids.length ? ` (${ids.join(", ")})` : ""}. Each reply is posted directly into that reviewer's thread, so write it as a direct answer to that one comment.
 
-In summary, write a reply to the reviewer: what you changed per point, and any pushback with reasoning.
+Rules for each reply body: at most three sentences. Say what you changed, or that you disagree and why, in the first sentence. No preamble, no thanking, no restating their comment back at them, no summarizing the whole PR. If they asked a question, answer it directly.
+
+Put your longer reasoning in summary, which is internal and is not posted anywhere.
 ${HOUSE_RULES}
 ${VERDICT_CONTRACT}`;
 }
@@ -218,6 +226,7 @@ export function parseVerdict(output: string): Verdict {
       prTitle: null,
       prBody: null,
       plan: null,
+      replies: [],
       summary: "The run produced no verdict block, so its result cannot be trusted.",
     };
   }
@@ -243,6 +252,21 @@ export function parseVerdict(output: string): Verdict {
         typeof parsed.plan === "string" && parsed.plan.trim()
           ? truncateWords(parsed.plan.trim(), 160)
           : null,
+      // Inline replies must stay short; a wall of text in a code thread is
+      // worse than in a comment because it buries the diff.
+      replies: Array.isArray(parsed.replies)
+        ? (parsed.replies as { commentId?: unknown; body?: unknown }[])
+            .filter(
+              (r) =>
+                typeof r?.commentId === "number" &&
+                typeof r?.body === "string" &&
+                r.body.trim().length > 0,
+            )
+            .map((r) => ({
+              commentId: r.commentId as number,
+              body: truncateWords((r.body as string).trim(), 90),
+            }))
+        : [],
       summary: typeof parsed.summary === "string" ? parsed.summary : "(no summary)",
     };
   } catch {
@@ -253,6 +277,7 @@ export function parseVerdict(output: string): Verdict {
       prTitle: null,
       prBody: null,
       plan: null,
+      replies: [],
       summary: "The verdict block was not valid JSON.",
     };
   }

@@ -547,6 +547,7 @@ export async function runPi(
         prTitle: null,
         prBody: null,
         plan: null,
+        replies: [],
         summary: `The run hit the ${Math.round(phaseTimeoutMs(cfg) / 60000)} minute phase budget and was stopped.`,
       },
     };
@@ -1029,12 +1030,35 @@ export async function step(
       if (committed) await push(state, gh, cfg, log);
 
       if (!cfg.dryRun) {
-        const reply = stripVerdict(verdict.summary) || verdict.summary;
-        await gh.comment(
-          state.repo,
-          prNumber,
-          `${reply}${committed ? "" : "\n\n(No code changes were needed for this round.)"}${SIG}`,
-        );
+        // Answer inside the reviewer's own thread. A detached top-level
+        // comment loses the line context that made the point legible.
+        const answered = new Set<number>();
+        for (const reply of verdict.replies) {
+          const target = comments.find((c) => c.id === reply.commentId);
+          if (!target) continue;
+          // Replies must attach to the thread root, not to another reply.
+          const root = target.in_reply_to_id ?? target.id;
+          try {
+            await gh.replyToReviewComment(state.repo, prNumber, root, reply.body);
+            answered.add(reply.commentId);
+          } catch (e) {
+            log(`inline reply to ${reply.commentId} failed: ${(e as Error).message}`);
+          }
+        }
+        if (answered.size > 0) {
+          log(`replied inline to ${answered.size} comment(s) on PR #${prNumber}`);
+        }
+
+        // Only fall back to a PR-level comment when there was nothing to reply
+        // to inline, so the two never duplicate each other.
+        if (answered.size === 0) {
+          const fallback = verdict.replies[0]?.body ?? truncate(stripVerdict(verdict.summary), 600);
+          await gh.comment(
+            state.repo,
+            prNumber,
+            `${fallback}${committed ? "" : "\n\nNo code changes were needed this round."}${SIG}`,
+          );
+        }
       }
 
       state.phase = "awaiting_review";
