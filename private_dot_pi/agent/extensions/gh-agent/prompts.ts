@@ -84,6 +84,7 @@ const HOUSE_RULES = `
 - If you notice a real problem outside this issue's scope, do not fix it, and do not record it in a roadmap, TODO, or docs file. Propose it in \`followUps\` and the harness files it as a proper issue on your behalf.
 - Do not create, amend, or push git commits yourself, and never run destructive git commands (reset --hard, push --force, branch -D). The harness handles all git operations.
 - If tests exist, run them. If a test command is documented, use it.
+- Verification costs you time from a fixed budget, so match the check to the question. While iterating, run the narrowest thing that answers what you just changed: a type check, a single test, or one package rather than the whole workspace. Save the project's full check-everything command (the one that also formats, lints, cross-compiles, builds docs, or runs the entire suite) for a single confirmation once you believe you are done. Running the full suite after every edit can consume the whole budget before you finish.
 - Prefer the smallest change that fully solves the issue.`;
 
 function issueContext(issue: Issue, thread: string): string {
