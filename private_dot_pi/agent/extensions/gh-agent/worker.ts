@@ -1212,17 +1212,28 @@ export async function step(
         return;
       }
 
-      const leftover = (
-        await exec("git", ["diff", "--name-only", "--diff-filter=U"], { cwd: wt })
-      ).stdout.trim();
-      if (leftover) {
+      // Judge the resolution by file contents, not by index state.
+      //
+      // The agent is forbidden from running git, so it can only edit the
+      // working tree; the index keeps listing every path as unmerged no matter
+      // how well it resolved. Checking --diff-filter=U here threw away good
+      // work every single time.
+      const unresolved = conflicted.filter((f) => {
+        try {
+          return /^(<{7}|>{7})/m.test(fs.readFileSync(path.join(wt, f), "utf-8"));
+        } catch {
+          // Deleted by the resolution (a legitimate outcome) is not a failure.
+          return false;
+        }
+      });
+
+      if (unresolved.length > 0) {
         await exec("git", ["merge", "--abort"], { cwd: wt });
         await block(
           state,
           gh,
           cfg,
-          `I tried to resolve the merge with \`${base}\` but left conflict markers in:\n${leftover
-            .split("\n")
+          `I tried to resolve the merge with \`${base}\` but left conflict markers in:\n${unresolved
             .map((f) => `- \`${f}\``)
             .join("\n")}`,
           log,
@@ -1230,7 +1241,25 @@ export async function step(
         return;
       }
 
+      // Staging is what actually marks the conflicted paths resolved.
       await exec("git", ["add", "-A"], { cwd: wt });
+      const stillUnmerged = (
+        await exec("git", ["diff", "--name-only", "--diff-filter=U"], { cwd: wt })
+      ).stdout.trim();
+      if (stillUnmerged) {
+        await exec("git", ["merge", "--abort"], { cwd: wt });
+        await block(
+          state,
+          gh,
+          cfg,
+          `Git still reports unmerged paths after staging the resolution:\n${stillUnmerged
+            .split("\n")
+            .map((f) => `- \`${f}\``)
+            .join("\n")}`,
+          log,
+        );
+        return;
+      }
       const commit = await exec("git", ["commit", "--no-edit"], { cwd: wt });
       if (commit.code !== 0) {
         await block(state, gh, cfg, `Couldn't finish the merge commit: ${scrub(commit.stderr)}`, log);
