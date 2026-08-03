@@ -492,12 +492,31 @@ export function modelFor(state: IssueState, cfg: Config): { model: string; think
   };
 }
 
+/**
+ * Whether a run died because its resumed session is no longer replayable.
+ *
+ * One session is reused across an issue's phases, and the provider rejects a
+ * resume whose recorded thinking blocks do not come back byte for byte. The
+ * run then exits in seconds having done nothing, which is not a result and
+ * must not be reported as one.
+ */
+function sessionPoisoned(output: string, stderr: string): boolean {
+  const all = `${output}\n${stderr}`;
+  // Anchored on the provider's wording rather than the words "thinking" and
+  // "blocks", which the agent can easily write about a codebase in passing.
+  return (
+    /blocks in the latest assistant message cannot be modified/.test(all) ||
+    /blocks must remain as they were in the original response/.test(all)
+  );
+}
+
 export async function runPi(
   prompt: string,
   state: IssueState,
   cfg: Config,
   gh: GitHub,
   log: Logger,
+  retried = false,
 ): Promise<RunResult> {
   const wt = state.worktree as string;
   const sessionDir = path.join(LOG_DIR, "sessions", `${state.repo.replace("/", "__")}__${state.issue}`);
@@ -604,6 +623,16 @@ export async function runPi(
         summary: `The run hit the ${Math.round(phaseTimeoutMs(cfg) / 60000)} minute phase budget and was stopped.`,
       },
     };
+  }
+
+  // A resumed session the provider will not accept can only fail the same way
+  // again. Start a clean one and rerun the phase; the prompt is self-contained,
+  // so only the agent's earlier exploration is lost.
+  if (sessionPoisoned(res.stdout, res.stderr) && !retried) {
+    state.sessionId = `${state.sessionId}-r${Date.now().toString(36)}`;
+    writeState(state);
+    log(`session rejected by the provider, retrying ${state.repo}#${state.issue} with a fresh one`);
+    return runPi(prompt, state, cfg, gh, log, true);
   }
 
   return { timedOut: false, output: res.stdout, verdict: parseVerdict(res.stdout) };
@@ -1227,6 +1256,19 @@ export async function step(
         gh,
         log,
       );
+
+      // A failed run has no answer in it. Its summary describes the harness's
+      // own problem, and posting that as a reply tells someone who asked a real
+      // question that their answer is "no verdict block".
+      //
+      // Throwing leaves the phase on responding with the comments still queued,
+      // so the next cycle retries. Three identical failures then pause the
+      // issue through the daemon's existing budget, which reports the real
+      // error instead of dressing it up as a reply.
+      if (verdict.status === "failed") {
+        throw new Error(`review round produced no usable result: ${verdict.summary}`);
+      }
+
       // Consumed; don't replay them on a later round.
       state.pendingComments = [];
 
