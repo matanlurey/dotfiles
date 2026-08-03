@@ -322,6 +322,15 @@ async function reconcile(
   return !isIdle(state.phase);
 }
 
+/**
+ * Issues currently being stepped, keyed repo#number.
+ *
+ * Held across cycles so a long run keeps its slot without blocking the rest:
+ * awaiting the whole batch meant three issues finishing in a minute sat idle
+ * behind one taking sixteen.
+ */
+const inFlight = new Map<string, Promise<void>>();
+
 async function cycle(cfg: Config, gh: GitHub): Promise<void> {
   const repos = await resolveRepos(cfg, gh);
   if (repos.length === 0) {
@@ -368,10 +377,15 @@ async function cycle(cfg: Config, gh: GitHub): Promise<void> {
   // Oldest first, so a busy queue still makes steady progress instead of
   // starving whatever was claimed first.
   ready.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const batch = ready.slice(0, cfg.maxConcurrentIssues);
-  const waiting = ready.slice(cfg.maxConcurrentIssues);
+
+  // Only fill the slots that are actually free. Issues already running keep
+  // theirs until they finish on their own.
+  const free = Math.max(0, cfg.maxConcurrentIssues - inFlight.size);
+  const startable = ready.filter((s) => !inFlight.has(`${s.repo}#${s.issue}`));
+  const batch = startable.slice(0, free);
+  const waiting = startable.slice(free);
   log(
-    `stepping ${batch.length} issue(s), ${waiting.length} waiting for a slot (${ready.length} ready)`,
+    `starting ${batch.length}, ${inFlight.size} already running, ${waiting.length} waiting (${ready.length} ready)`,
   );
 
   // Anything ready but not picked is waiting, not working. Saying otherwise
@@ -384,23 +398,29 @@ async function cycle(cfg: Config, gh: GitHub): Promise<void> {
     }
   }
 
-  await Promise.all(
-    batch.map(async (state) => {
-      if (!acquireLock(state.repo, state.issue)) {
-        log(`skipping ${state.repo}#${state.issue}: locked by another process`);
-        return;
-      }
+  for (const state of batch) {
+    const key = `${state.repo}#${state.issue}`;
+    if (inFlight.has(key)) continue;
+    if (!acquireLock(state.repo, state.issue)) {
+      log(`skipping ${key}: locked by another process`);
+      continue;
+    }
+    // Deliberately not awaited. A slot is released the moment its own issue
+    // finishes, so one slow issue cannot hold the others idle.
+    const run = (async () => {
       try {
         // Re-read: reconcile may have advanced the phase since we queued it.
         const fresh = readState(state.repo, state.issue) ?? state;
         await step(fresh, cfg, new GitHub(cfg), log);
       } catch (e) {
-        log(`step failed for ${state.repo}#${state.issue}: ${(e as Error).message}`);
+        log(`step failed for ${key}: ${(e as Error).message}`);
       } finally {
         releaseLock(state.repo, state.issue);
+        inFlight.delete(key);
       }
-    }),
-  );
+    })();
+    inFlight.set(key, run);
+  }
 }
 
 async function main(): Promise<void> {
@@ -439,6 +459,12 @@ async function main(): Promise<void> {
     }
     if (once) break;
     await new Promise((r) => setTimeout(r, cfg.pollIntervalSeconds * 1000));
+  }
+
+  // The cycle no longer awaits its own runs, so --once has to.
+  if (once && inFlight.size > 0) {
+    log(`waiting for ${inFlight.size} in-flight issue(s)`);
+    await Promise.all(inFlight.values());
   }
 }
 
