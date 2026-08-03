@@ -18,8 +18,16 @@ export type Verdict = {
   status: "ok" | "needs_help" | "failed";
   /** Question to post on the issue when status is needs_help. */
   question: string | null;
-  /** Short human-readable summary, used in issue comments and PR bodies. */
+  /** The internal record. Never posted to a human-facing surface on its own. */
   summary: string;
+  /**
+   * The answer to a comment that had no inline thread to reply to.
+   *
+   * Exists because the fallback used to post `summary`, which is written as a
+   * report about the work ("Investigated the reviewer's question about...").
+   * Someone who asks a question deserves an answer addressed to them.
+   */
+  reply: string | null;
   /**
    * Proposed pull request title. The agent cannot touch GitHub itself, so this
    * is how it asks for a title matching the repo's convention (many repos gate
@@ -59,7 +67,7 @@ const VERDICT_CONTRACT = `
 End your final message with exactly this block, and nothing after it:
 
 ${VERDICT_START}
-{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "plan": <string or null>, "replies": [{"commentId": <number>, "body": "<short>"}], "followUps": [{"title": "<short>", "body": "<short>"}], "summary": "<one paragraph>"}
+{"confidence": <0.0-1.0>, "status": "ok" | "needs_help" | "failed", "question": <string or null>, "prTitle": <string or null>, "prBody": <string or null>, "plan": <string or null>, "replies": [{"commentId": <number>, "body": "<short>"}], "followUps": [{"title": "<short>", "body": "<short>"}], "reply": <string or null>, "summary": "<one paragraph>"}
 ${VERDICT_END}
 
 Rules for the verdict:
@@ -69,7 +77,8 @@ Rules for the verdict:
 - prTitle proposes the pull request title. Check whether the repo enforces a title convention (a Conventional Commits CI check, CONTRIBUTING.md, or the style of recent merged PRs and CHANGELOG entries) and match it, including any breaking-change marker. Leave it null if you have no better title than the issue title.
 - If you deviated from something the issue explicitly specified, especially a public API name or signature, say so in the first sentence of prBody and give the reason. A reviewer should never have to diff the issue against your PR to discover you renamed what they asked for.
 - prBody is what a reviewer reads. Keep it under 120 words. The diff already shows what changed, so do not narrate it: no file-by-file walkthrough, no restating the issue, no summary of your own process. Lead with why the change is shaped the way it is, then note anything genuinely non-obvious (a tradeoff you made, a risk, something you deliberately left out), then say what you want looked at most closely. Omit any section you have nothing real to put in it. Plain prose or a couple of short bullets. No headings, no tables, no emoji.
-- summary is the internal record and can be as long as it needs to be. Do not put that text in prBody or plan.
+- summary is the internal record and can be as long as it needs to be. Do not put that text in prBody, plan, or reply.
+- reply answers a comment that has no inline thread to reply to. Write it to the person who asked, in second person, answering their actual question first. Under 120 words. No preamble about what you investigated and no restating their question back at them. If they were right, say so plainly. If they were wrong, say why. Leave it null when every point already has an inline reply.
 - followUps is for genuine problems you found but deliberately did not fix, because they are outside this issue's scope. Each needs a title written the way a maintainer would write it, and a body of a few sentences: what is wrong, where, and why it matters. At most three, and only things you would defend in review. An empty list is the normal case. Do not propose speculative cleanups, restatements of this issue, or work you already did.
 - Never fabricate progress. If you did not finish, say so.`;
 
@@ -315,6 +324,7 @@ export function parseVerdict(output: string): Verdict {
       plan: null,
       replies: [],
       followUps: [],
+      reply: null,
       summary: "The run produced no verdict block, so its result cannot be trusted.",
     };
   }
@@ -370,6 +380,10 @@ export function parseVerdict(output: string): Verdict {
               body: truncateWords((r.body as string).trim(), 90),
             }))
         : [],
+      reply:
+        typeof parsed.reply === "string" && parsed.reply.trim()
+          ? truncateWords(parsed.reply.trim(), 120)
+          : null,
       summary: typeof parsed.summary === "string" ? parsed.summary : "(no summary)",
     };
   } catch {
@@ -382,6 +396,7 @@ export function parseVerdict(output: string): Verdict {
       plan: null,
       replies: [],
       followUps: [],
+      reply: null,
       summary: "The verdict block was not valid JSON.",
     };
   }

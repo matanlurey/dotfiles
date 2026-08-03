@@ -620,6 +620,7 @@ export async function runPi(
         plan: null,
         replies: [],
         followUps: [],
+        reply: null,
         summary: `The run hit the ${Math.round(phaseTimeoutMs(cfg) / 60000)} minute phase budget and was stopped.`,
       },
     };
@@ -1312,7 +1313,13 @@ export async function step(
         // Fall back to a PR-level comment when there was nothing to reply to
         // inline, which is also how a conversation comment gets an answer.
         if (answered.size === 0) {
-          const fallback = verdict.replies[0]?.body ?? truncate(stripVerdict(verdict.summary), 600);
+          // summary is the internal record and reads like one. Prefer the
+          // field written to the person; fall back to an inline reply's text
+          // only if the model left reply null.
+          const fallback =
+            verdict.reply ??
+            verdict.replies[0]?.body ??
+            truncate(stripVerdict(verdict.summary), 600);
           await gh.comment(
             state.repo,
             prNumber,
