@@ -1,5 +1,5 @@
 ---
-description: Start or resume a manual Hunk audit of a path/glob - batches files, tracks progress, opens the first pending batch in Hunk.
+description: Page through a path/glob in Hunk, batched - opens batch 1 (or resumes where you left off) in a live Hunk session.
 ---
 Run this via bash now, then report its output verbatim - nothing else, no summarizing, no extra commentary:
 

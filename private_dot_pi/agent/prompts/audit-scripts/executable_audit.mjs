@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// Deterministic bookkeeping for the Hunk manual-audit workflow.
-// Subcommands: init, next, status, pending-comments, mark-triaged
+// Deterministic bookkeeping for the Hunk manual-audit workflow: batch a
+// path/glob's files and page through them in a live Hunk session.
+// Subcommands: init, next, prev
 //
 // Design constraint this works around: pi-prompt-template-model's deterministic
 // `script:` step never receives the slash command's runtime arguments (checked
 // against the installed extension source) - only the markdown body gets $1/$@
 // substitution. So `init` (which needs a path/glob argument) is invoked by the
-// LLM via bash from the prompt body, while next/status/pending-comments/
-// mark-triaged take no required argument and read all state from the ledger,
-// so they can run as true pre-LLM deterministic steps.
+// LLM via bash from the prompt body, while next/prev take no argument and read
+// all state from the ledger, so they can run as true pre-LLM deterministic steps.
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -58,39 +58,6 @@ function slugify(s) {
 
 function sha256(s) {
 	return createHash("sha256").update(s).digest("hex");
-}
-
-// Leading intent prefix on a comment's own text, colon optional: "fix: leaks the handle",
-// "fix leaks the handle", or bare "fix". The lookahead requires a real word boundary
-// (end of string, colon, or space) so "filed"/"fixture"/"explains" don't false-match.
-// No recognized prefix means "auto" - investigate, then judge.
-const INTENT_PREFIX = /^(explain|file|fix)(?=$|[:\s])/i;
-
-function parseIntent(summary) {
-	const m = summary.match(INTENT_PREFIX);
-	if (!m) return { intent: "auto", text: summary };
-	const rest = summary.slice(m[0].length).replace(/^:?\s*/, "");
-	return { intent: m[1].toLowerCase(), text: rest };
-}
-
-// `hunk session comment list --type user` returns a different shape than the
-// --type live/agent view tested against earlier: noteId (not commentId), body
-// (not summary), newRange/oldRange (not line+side) - confirmed against a real
-// human-authored comment, not assumed. These normalize either shape so a stray
-// CLI-added comment wouldn't crash this either.
-function commentId(c) {
-	return c.commentId ?? c.noteId;
-}
-
-function commentText(c) {
-	return c.summary ?? c.body ?? "";
-}
-
-function commentLineAndSide(c) {
-	if (Array.isArray(c.newRange)) return { line: c.newRange[c.newRange.length - 1], side: "new" };
-	if (Array.isArray(c.oldRange)) return { line: c.oldRange[c.oldRange.length - 1], side: "old" };
-	if (typeof c.line === "number" && c.side) return { line: c.line, side: c.side };
-	return { line: null, side: null };
 }
 
 function chunked(arr, size) {
@@ -145,7 +112,7 @@ function enumerateFiles(root, pathspec) {
 }
 
 function partitionBatches(files, batchSize) {
-	return chunked(files, batchSize).map((batch, index) => ({ index, files: batch, status: "pending" }));
+	return chunked(files, batchSize).map((batch, index) => ({ index, files: batch }));
 }
 
 // --- paths & persistence ---
@@ -154,7 +121,6 @@ const auditDir = (root) => path.join(root, ".matan", "audit");
 const currentPath = (root) => path.join(auditDir(root), "current.json");
 const targetDir = (root, slug) => path.join(auditDir(root), slug);
 const ledgerPath = (root, slug) => path.join(targetDir(root, slug), "ledger.json");
-const triagePath = (root, slug) => path.join(targetDir(root, slug), "triage.json");
 
 function readJson(p, fallback) {
 	if (!existsSync(p)) return fallback;
@@ -206,14 +172,6 @@ function hunkReload(ledger, root, files) {
 	return withSessionFallback(ledger, root, (selector) => tryRun("hunk", ["session", "reload", ...selector, "--", "diff", ledger.diffTarget, "--", ...files]));
 }
 
-function hunkCommentList(ledger, root) {
-	return withSessionFallback(ledger, root, (selector) => tryRun("hunk", ["session", "comment", "list", ...selector, "--type", "user", "--json"]));
-}
-
-function hunkCommentAdd(ledger, root, { file, sideFlag, line, summary, author }) {
-	return withSessionFallback(ledger, root, (selector) => tryRun("hunk", ["session", "comment", "add", ...selector, "--file", file, sideFlag, line, "--summary", summary, "--author", author]));
-}
-
 // Resolves a bare --repo match into one concrete session id so every later
 // call in this audit targets that exact session, even if more windows on
 // the same repo open later. Only meaningful right after a successful reload.
@@ -226,26 +184,15 @@ function resolveSessionId(root) {
 
 // --- reporting ---
 
-function batchSummary(ledger) {
-	const done = ledger.batches.filter((b) => b.status === "done").length;
-	const total = ledger.batches.length;
-	const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-	return { done, total, pct };
-}
-
 function printLedgerReport(ledger, { hunkResult } = {}) {
-	const { done, total, pct } = batchSummary(ledger);
+	const total = ledger.batches.length;
 	const active = ledger.batches[ledger.activeBatch];
+	const totalFiles = ledger.batches.reduce((n, b) => n + b.files.length, 0);
 	const lines = [
-		`Audit target: ${ledger.target} (${ledger.batches.reduce((n, b) => n + b.files.length, 0)} files, ${total} batches of ${ledger.batchSize})`,
-		`Progress: ${done}/${total} batches reviewed (${pct}%)`,
+		`Audit target: ${ledger.target} (${totalFiles} files, ${total} batches of ${ledger.batchSize})`,
+		`Batch ${active.index + 1}/${total} (${active.files.length} files):`,
 	];
-	if (active && active.status === "pending") {
-		lines.push(`Active batch ${active.index + 1}/${total} (${active.files.length} files):`);
-		for (const f of active.files) lines.push(`  ${f}`);
-	} else {
-		lines.push("All batches reviewed. Run /audit-triage to process any comments you left.");
-	}
+	for (const f of active.files) lines.push(`  ${f}`);
 	if (hunkResult) {
 		lines.push(hunkResult.ok ? "Hunk session retargeted to this batch." : `Hunk reload failed: ${hunkResult.stderr.trim() || "(no session found for this repo - open one with `hunk diff` in a terminal first)"}`);
 	}
@@ -275,8 +222,8 @@ function cmdInit(args) {
 		if (existing.fileListHash !== fileListHash) {
 			throw new Error(
 				[
-					`File set for "${target}" changed since the last audit (${existing.batches.reduce((n, b) => n + b.files.length, 0)} files then, ${files.length} now).`,
-					`Re-run with --fresh to start a new ledger, or review the existing state as-is via /audit-status.`,
+					`File set for "${target}" changed since last time (${existing.batches.reduce((n, b) => n + b.files.length, 0)} files then, ${files.length} now).`,
+					`Re-run with --fresh to start over.`,
 				].join("\n"),
 			);
 		}
@@ -284,7 +231,7 @@ function cmdInit(args) {
 		ledger.updatedAt = new Date().toISOString();
 	} else {
 		ledger = {
-			version: 1,
+			version: 2,
 			target,
 			targetSlug: slug,
 			repoRoot: root,
@@ -301,133 +248,48 @@ function cmdInit(args) {
 	}
 	if (sessionOverride) ledger.hunkSessionId = sessionOverride;
 
-	// Resuming: land on the first pending batch rather than wherever it was left.
-	const firstPending = ledger.batches.findIndex((b) => b.status === "pending");
-	ledger.activeBatch = firstPending === -1 ? ledger.batches.length - 1 : firstPending;
-
 	writeJson(ledgerPath(root, slug), ledger);
 	writeJson(currentPath(root), { targetSlug: slug, updatedAt: new Date().toISOString() });
 
-	let hunkResult;
-	if (firstPending !== -1) {
-		hunkResult = hunkReload(ledger, root, ledger.batches[firstPending].files);
-		if (hunkResult.ok && !ledger.hunkSessionId) {
-			ledger.hunkSessionId = resolveSessionId(root);
-			writeJson(ledgerPath(root, slug), ledger);
-		}
+	const hunkResult = hunkReload(ledger, root, ledger.batches[ledger.activeBatch].files);
+	if (hunkResult.ok && !ledger.hunkSessionId) {
+		ledger.hunkSessionId = resolveSessionId(root);
+		writeJson(ledgerPath(root, slug), ledger);
 	}
 	printLedgerReport(ledger, { hunkResult });
 }
 
 function cmdNext() {
 	const root = repoRoot();
-	const { current, ledger, error } = loadActiveLedger(root);
+	const { ledger, error } = loadActiveLedger(root);
 	if (error) throw new Error(error);
 
-	const activeIdx = ledger.activeBatch;
-	if (ledger.batches[activeIdx]) ledger.batches[activeIdx].status = "done";
-
-	const nextIdx = ledger.batches.findIndex((b) => b.status === "pending");
-	let hunkResult;
-	if (nextIdx !== -1) {
-		ledger.activeBatch = nextIdx;
-		hunkResult = hunkReload(ledger, root, ledger.batches[nextIdx].files);
+	const total = ledger.batches.length;
+	if (ledger.activeBatch >= total - 1) {
+		console.log(`Already at the last batch (${total}/${total}).`);
+		return;
 	}
+	ledger.activeBatch++;
+	const hunkResult = hunkReload(ledger, root, ledger.batches[ledger.activeBatch].files);
 	ledger.updatedAt = new Date().toISOString();
 	writeJson(ledgerPath(root, ledger.targetSlug), ledger);
 	printLedgerReport(ledger, { hunkResult });
 }
 
-function cmdStatus() {
-	const root = repoRoot();
-	const { ledger, error } = loadActiveLedger(root);
-	if (error) {
-		console.log(error);
-		return;
-	}
-	printLedgerReport(ledger);
-}
-
-function cmdPendingComments() {
-	const root = repoRoot();
-	const { ledger, error } = loadActiveLedger(root);
-	if (error) {
-		console.log(error);
-		process.exitCode = 1;
-		return;
-	}
-
-	const listResult = hunkCommentList(ledger, root);
-	if (!listResult.ok) {
-		console.log(`Could not read Hunk comments: ${listResult.stderr.trim()}`);
-		process.exitCode = 1;
-		return;
-	}
-
-	const { comments } = JSON.parse(listResult.stdout);
-	const triage = readJson(triagePath(root, ledger.targetSlug), { version: 1, comments: {} });
-	const pending = comments.filter((c) => !(commentId(c) in triage.comments));
-
-	if (pending.length === 0) {
-		console.log(`No new comments to triage (${comments.length} total, all already triaged).`);
-		process.exitCode = 1; // signals "nothing to do" so the prompt template skips the LLM turn
-		return;
-	}
-
-	const lines = [`${pending.length} comment(s) pending triage (${comments.length - pending.length} already triaged):`, ""];
-	for (const c of pending) {
-		const { intent, text } = parseIntent(commentText(c));
-		const { line, side } = commentLineAndSide(c);
-		lines.push(`- commentId: ${commentId(c)}`);
-		lines.push(`  file: ${c.filePath}`);
-		lines.push(`  line: ${line} (${side})`);
-		lines.push(`  hunk: ${c.hunkIndex}`);
-		lines.push(`  intent: ${intent}`);
-		lines.push(`  text: ${text || "(none)"}`);
-		lines.push("");
-	}
-	console.log(lines.join("\n"));
-}
-
-function cmdMarkTriaged(args) {
-	const flags = parseFlags(args);
-	const commentId = flags._[0];
-	const status = flags._[1];
-	if (!commentId || !["filed", "fixed", "explained"].includes(status)) {
-		throw new Error("usage: audit.mjs mark-triaged <commentId> <filed|fixed|explained> --file <path> --line <n> --side <old|new> [--issue <url>] [--note <text>]");
-	}
-	if (!flags.file || !flags.line || !flags.side) throw new Error("mark-triaged requires --file, --line, and --side");
-
+function cmdPrev() {
 	const root = repoRoot();
 	const { ledger, error } = loadActiveLedger(root);
 	if (error) throw new Error(error);
 
-	const triage = readJson(triagePath(root, ledger.targetSlug), { version: 1, comments: {} });
-	triage.comments[commentId] = {
-		status,
-		issueUrl: flags.issue ?? null,
-		note: flags.note ?? "",
-		triagedAt: new Date().toISOString(),
-	};
-	writeJson(triagePath(root, ledger.targetSlug), triage);
-
-	const summary =
-		status === "filed"
-			? `Filed${flags.issue ? `: ${flags.issue}` : " (no link provided)"}${flags.note ? ` — ${flags.note}` : ""}`
-			: status === "fixed"
-				? `Fixed locally, uncommitted${flags.note ? ` — ${flags.note}` : ""}`
-				: `Explained${flags.note ? `: ${flags.note}` : ""}`;
-	// A new comment can only land on a file that's in the *currently loaded*
-	// diff, but triage often happens well after the human has moved past the
-	// batch that file belonged to. Widen to the full target first so any file
-	// in scope is addressable; the next /audit-next or /audit-status naturally
-	// re-narrows to the correct active batch, so there's no need to restore it here.
-	const allFiles = ledger.batches.flatMap((b) => b.files);
-	hunkReload(ledger, root, allFiles);
-
-	const sideFlag = flags.side === "old" ? "--old-line" : "--new-line";
-	const addResult = hunkCommentAdd(ledger, root, { file: flags.file, sideFlag, line: flags.line, summary, author: `triage:${status}` });
-	console.log(addResult.ok ? `Recorded ${status} for ${commentId}.` : `Recorded ${status} for ${commentId}, but the Hunk annotation failed: ${addResult.stderr.trim()}`);
+	if (ledger.activeBatch <= 0) {
+		console.log(`Already at the first batch (1/${ledger.batches.length}).`);
+		return;
+	}
+	ledger.activeBatch--;
+	const hunkResult = hunkReload(ledger, root, ledger.batches[ledger.activeBatch].files);
+	ledger.updatedAt = new Date().toISOString();
+	writeJson(ledgerPath(root, ledger.targetSlug), ledger);
+	printLedgerReport(ledger, { hunkResult });
 }
 
 // --- CLI plumbing ---
@@ -461,17 +323,11 @@ try {
 		case "next":
 			cmdNext();
 			break;
-		case "status":
-			cmdStatus();
-			break;
-		case "pending-comments":
-			cmdPendingComments();
-			break;
-		case "mark-triaged":
-			cmdMarkTriaged(rest);
+		case "prev":
+			cmdPrev();
 			break;
 		default:
-			console.error("usage: audit.mjs <init|next|status|pending-comments|mark-triaged> ...");
+			console.error("usage: audit.mjs <init|next|prev> ...");
 			process.exit(2);
 	}
 } catch (err) {

@@ -1,8 +1,8 @@
 ---
-description: Open the next batch in Hunk.
+description: Open the previous batch in Hunk.
 deterministic:
   script:
     path: ./audit-scripts/audit.mjs
-    args: ["next"]
+    args: ["prev"]
   handoff: never
 ---

@@ -246,20 +246,18 @@ zellij d myproject               # Delete session
 | **hunk-review** | Drives live Hunk diff-review sessions via CLI — inspects focus, navigates files/hunks, and adds inline review comments (bundled with `hunk`, copied via `hunk skill path`) |
 | **simplify** | Reviews code for word choice, structure, and overfitting before it's ready for human review (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **done** | Wraps up a finished feature — commits, rebases, merges/PRs, and cleans up worktrees/workspaces (git and jj) (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
-| **hunk-audit** | Triages comments left during a manual `/audit` pass over Hunk batches — investigates each one, then files a cleanup issue or fixes it locally |
 
 #### Pi Prompt Templates
 
-Custom slash commands (`private_dot_pi/agent/prompts/`, via `pi-prompt-template-model`) for the manual Hunk audit workflow: read a path/glob in reviewable batches, track progress, and triage the comments left along the way.
+Custom slash commands (`private_dot_pi/agent/prompts/`, via `pi-prompt-template-model`) for paging through a path/glob in Hunk, batched — reviewing and discussing it is just the `hunk-review` skill above from there.
 
 | Command | What it does |
 |---------|---------------|
-| **/audit \<path-or-glob\>** | Enumerates non-ignored, non-generated, non-binary files under the target, splits them into batches, and opens the first pending batch in your live Hunk session. Resumable — re-running the same target continues where it left off; `--fresh` restarts it; `--batch-size N` overrides the default of 8 |
-| **/audit-next** | Marks the current batch reviewed and opens the next pending one in Hunk |
-| **/audit-status** | Shows batches done/total and % without changing anything |
-| **/audit-triage** | Reads comments left in Hunk since the last triage and, per the `hunk-audit` skill, investigates each one before filing a cleanup issue or fixing it locally |
+| **/audit \<path-or-glob\>** | Enumerates non-ignored, non-generated, non-binary files under the target, splits them into batches, and opens batch 1 in your live Hunk session. Resumable — re-running the same target continues from wherever you left off; `--fresh` restarts it; `--batch-size N` overrides the default of 8 |
+| **/audit-next** | Opens the next batch in Hunk |
+| **/audit-prev** | Opens the previous batch in Hunk |
 
-The bookkeeping (enumeration, batching, the progress ledger, resuming) lives in `private_dot_pi/agent/prompts/audit-scripts/audit.mjs` — a plain Node script, not a Pi extension, since none of this needs a persistent background process or a live status widget.
+The bookkeeping (enumeration, batching, current position, resuming) lives in `private_dot_pi/agent/prompts/audit-scripts/audit.mjs` — a plain Node script, not a Pi extension, since none of this needs a persistent background process or a live status widget.
 
 ### Brewfile
 
