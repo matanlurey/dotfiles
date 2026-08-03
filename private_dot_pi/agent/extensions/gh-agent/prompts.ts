@@ -260,10 +260,52 @@ ${VERDICT_CONTRACT}`;
  * Extract the verdict block. A missing or malformed block is deliberately
  * reported as low confidence so the caller escalates instead of proceeding.
  */
-export function parseVerdict(output: string): Verdict {
+/**
+ * Pull the JSON object out of a verdict block.
+ *
+ * The closing fence is treated as optional. Models reliably emit the opening
+ * marker and a complete object but sometimes drop the trailing fence, and
+ * rejecting those cost four issues a full phase each: the work was done, the
+ * JSON was valid, and the agent was told its result could not be trusted.
+ * Scanning braces recovers the object whether or not the fence arrived.
+ */
+function extractVerdictJson(output: string): string | null {
   const start = output.lastIndexOf(VERDICT_START);
-  const end = output.lastIndexOf(VERDICT_END);
-  if (start === -1 || end === -1 || end < start) {
+  if (start === -1) return null;
+  const after = start + VERDICT_START.length;
+
+  const end = output.indexOf(VERDICT_END, after);
+  if (end !== -1) return output.slice(after, end).trim();
+
+  const rest = output.slice(after);
+  const open = rest.indexOf("{");
+  if (open === -1) return null;
+
+  // Brace matching, skipping anything inside a string so a brace in prose
+  // ("resize {n}") cannot end the object early.
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = open; i < rest.length; i++) {
+    const ch = rest[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') inString = !inString;
+    else if (!inString && ch === "{") depth++;
+    else if (!inString && ch === "}" && --depth === 0) return rest.slice(open, i + 1);
+  }
+  return null;
+}
+
+export function parseVerdict(output: string): Verdict {
+  const json = extractVerdictJson(output);
+  if (json === null) {
     return {
       confidence: 0,
       status: "failed",
@@ -276,7 +318,6 @@ export function parseVerdict(output: string): Verdict {
       summary: "The run produced no verdict block, so its result cannot be trusted.",
     };
   }
-  const json = output.slice(start + VERDICT_START.length, end).trim();
   try {
     const parsed = JSON.parse(json) as Partial<Verdict>;
     const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0;
