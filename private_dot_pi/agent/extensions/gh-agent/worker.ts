@@ -743,7 +743,12 @@ export async function publishStatus(
         if (stale !== entry.label) await gh.removeLabel(state.repo, state.issue, stale);
       }
       await gh.addLabels(state.repo, state.issue, [entry.label]);
+      // Persist immediately. Callers write state at their own times, and a
+      // caller that wrote before calling this leaves the cache claiming a
+      // label that was never published. The skip check then believes it is
+      // already correct and the stale label survives every later cycle.
       state.statusLabel = entry.label;
+      writeState(state);
     } catch (e) {
       log(`status label failed: ${(e as Error).message}`);
     }
