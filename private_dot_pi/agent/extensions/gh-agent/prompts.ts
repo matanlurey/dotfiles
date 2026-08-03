@@ -83,6 +83,18 @@ Rules for the verdict:
 - followUps is for genuine problems you found but deliberately did not fix, because they are outside this issue's scope. Each needs a title written the way a maintainer would write it, and a body of a few sentences: what is wrong, where, and why it matters. At most three, and only things you would defend in review. An empty list is the normal case. Do not propose speculative cleanups, restatements of this issue, or work you already did.
 - Never fabricate progress. If you did not finish, say so.`;
 
+/**
+ * Asks only for the block, after a run that did the work and omitted it.
+ *
+ * Sent into the same resumed session, so the model still has everything it did
+ * and reports rather than redoes it. Without this, a run that solved the
+ * problem and forgot the block was reported to a human as untrustworthy.
+ */
+export const VERDICT_ONLY_PROMPT = `Your last message did not end with the required verdict block.
+
+Do not redo any work and do not change any files. Report what you already did in this session.
+${VERDICT_CONTRACT}`;
+
 const HOUSE_RULES = `
 ## Operating rules
 

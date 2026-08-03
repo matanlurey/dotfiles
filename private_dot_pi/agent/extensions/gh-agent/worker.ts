@@ -26,6 +26,8 @@ import {
   reviewResponsePrompt,
   stripVerdict,
   type Verdict,
+  VERDICT_ONLY_PROMPT,
+  VERDICT_START,
 } from "./prompts.ts";
 import { archive, type IssueState, type Phase, writeState } from "./state.ts";
 
@@ -646,7 +648,30 @@ export async function runPi(
     return runPi(prompt, state, cfg, gh, log, true);
   }
 
-  return { timedOut: false, output: res.stdout, verdict: parseVerdict(res.stdout) };
+  const verdict = parseVerdict(res.stdout);
+
+  // The model sometimes ends on a good final message and simply omits the
+  // block. Six minutes of real work then gets reported as untrustworthy, so
+  // ask once for just the block rather than throwing the run away. The session
+  // is resumed, so it still has everything it did.
+  if (verdict.status === "failed" && !res.stdout.includes(VERDICT_START) && !retried) {
+    log(`no verdict block from ${state.repo}#${state.issue}, asking for one`);
+    return runPi(VERDICT_ONLY_PROMPT, state, cfg, gh, log, true);
+  }
+
+  return { timedOut: false, output: res.stdout, verdict };
+}
+
+/**
+ * The part of a verdict safe to show a human, or nothing.
+ *
+ * A failed verdict's summary is the harness describing its own problem ("the
+ * run produced no verdict block"). Pasting that into a message addressed to a
+ * person answers a question they did not ask, in a voice that is not talking
+ * to them. This has leaked four times; route human-facing text through here.
+ */
+function explanation(verdict: Verdict): string {
+  return verdict.status === "failed" ? "" : verdict.summary;
 }
 
 const SIG = "\n\n<sub>Posted automatically by the issue agent.</sub>";
@@ -1082,7 +1107,7 @@ export async function step(
           state,
           gh,
           cfg,
-          `I couldn't produce a plan I trust (confidence ${verdict.confidence.toFixed(2)}).\n\n${verdict.summary}\n\nCould you clarify what you want here?`,
+          `I couldn't produce a plan I trust (confidence ${verdict.confidence.toFixed(2)}).${explanation(verdict) ? `\n\n${explanation(verdict)}` : ""}\n\nCould you clarify what you want here?`,
           log,
         );
         return;
@@ -1136,7 +1161,7 @@ export async function step(
           state,
           gh,
           cfg,
-          `I attempted the change but I'm not confident in it (confidence ${verdict.confidence.toFixed(2)}).\n\n${verdict.summary}\n\nHow would you like me to proceed?`,
+          `I attempted the change but I'm not confident in it (confidence ${verdict.confidence.toFixed(2)}).${explanation(verdict) ? `\n\n${explanation(verdict)}` : ""}\n\nHow would you like me to proceed?`,
           log,
         );
         return;
@@ -1164,7 +1189,7 @@ export async function step(
           state,
           gh,
           cfg,
-          `The run reported success but left no changes in the working tree, so there's nothing to open a PR with.\n\n${verdict.summary}`,
+          `The run reported success but left no changes in the working tree, so there's nothing to open a PR with.${explanation(verdict) ? `\n\n${explanation(verdict)}` : ""}`,
           log,
         );
         return;
@@ -1433,7 +1458,11 @@ export async function step(
           state,
           gh,
           cfg,
-          `I couldn't resolve the conflicts with \`${base}\` myself.\n\n${verdict.summary}\n\nConflicted files:\n${conflicted.map((f) => `- \`${f}\``).join("\n")}`,
+          // A failed verdict's summary describes the harness's own problem, not
+          // the conflict, so it has no place in a message asking for help.
+          `I couldn't resolve the conflicts with \`${base}\` myself.${
+            verdict.status === "failed" ? "" : `\n\n${verdict.summary}`
+          }\n\nConflicted files:\n${conflicted.map((f) => `- \`${f}\``).join("\n")}`,
           log,
         );
         return;
@@ -1501,7 +1530,7 @@ export async function step(
         await gh.comment(
           state.repo,
           state.prNumber as number,
-          `Merged \`${base}\` in and resolved the conflicts.\n\n${truncate(verdict.summary, 500)}${SIG}`,
+          `Merged \`${base}\` in and resolved the conflicts.${explanation(verdict) ? `\n\n${truncate(explanation(verdict), 500)}` : ""}${SIG}`,
         );
       }
       log(`resolved ${conflicted.length} conflict(s) with ${base}`);
