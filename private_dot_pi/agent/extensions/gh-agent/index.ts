@@ -105,6 +105,22 @@ function forbiddenForWorker(command: string): string | undefined {
         "is fine."
       );
     }
+    // The environment strips SSH_AUTH_SOCK and points GIT_SSH_COMMAND at
+    // /usr/bin/false, but a shell can set both back, and HOME is inherited so
+    // the key in ~/.ssh is readable. Block the tool as well as the variable.
+    if (/^(sudo\s+)?(ssh|ssh-add|ssh-agent|scp|sftp)\b/.test(cmd)) {
+      return (
+        "SSH is not available to you. It authenticates as the repo owner rather " +
+        "than the app's bot user, which would bypass the harness's scope and " +
+        "branch rules. The harness performs every push."
+      );
+    }
+    if (/GIT_SSH(_COMMAND)?\s*=/.test(cmd) || /\bssh:\/\/|git@[\w.-]+:/.test(cmd)) {
+      return (
+        "Re-enabling SSH or using an SSH remote is not available to you, for the " +
+        "same reason: it would act as the repo owner instead of the bot."
+      );
+    }
     if (/^(sudo\s+)?jj\s+(git|push|describe|commit|new|squash|abandon|edit)\b/.test(cmd)) {
       return (
         "This is a plain git worktree with no jj workspace, and the harness " +

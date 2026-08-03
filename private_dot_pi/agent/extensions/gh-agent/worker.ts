@@ -553,6 +553,16 @@ export async function runPi(
     GITHUB_TOKEN: "",
     GH_ENTERPRISE_TOKEN: "",
     GH_CONFIG_DIR: blindDir,
+    // SSH is a second, quieter credential path to the same repos.
+    //
+    // Blocking the HTTPS token is not enough: the child inherits HOME, so ssh
+    // finds the key in ~/.ssh on its own, with no agent involved. `ssh -T
+    // git@github.com` from a worker answers "Hi matanlurey", which is a push
+    // to any repo as the owner, around the App's scope, the repo allowlist and
+    // every branch rule the harness enforces.
+    SSH_AUTH_SOCK: "",
+    GIT_SSH_COMMAND: "/usr/bin/false",
+    GIT_SSH: "/usr/bin/false",
     // Neutralize credential helpers and any push-rewriting url.insteadOf rules.
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_SYSTEM: "/dev/null",
