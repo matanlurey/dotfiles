@@ -12,7 +12,7 @@
 
 import fs from "node:fs";
 import { type Config, DAEMON_PID_FILE, ensureDirs, loadConfig } from "./config.ts";
-import type { Comment } from "./github.ts";
+import type { CheckSummary, Comment, PullRequest } from "./github.ts";
 import { GitHub } from "./github.ts";
 import {
   acquireLock,
@@ -27,6 +27,7 @@ import {
   releaseLock,
   writeState,
 } from "./state.ts";
+import type { Logger } from "./worker.ts";
 import { finish, killChildren, pause, publishQueued, publishStatus, step } from "./worker.ts";
 
 /**
@@ -271,6 +272,8 @@ async function reconcile(
     // No review activity: check whether CI needs attention.
     const checks = await gh.checks(state.repo, pr.head.sha);
 
+    if (cfg.autoMerge && (await tryAutoMerge(state, cfg, gh, pr, checks, log))) return false;
+
     if (checks.conclusion === "failure" && state.lastCiSha !== pr.head.sha) {
       if (state.ciAttempts >= cfg.budget.maxCiFixAttempts) {
         await pause(
@@ -320,6 +323,67 @@ async function reconcile(
 
   // Any other non-idle phase is mid-flight work to continue.
   return !isIdle(state.phase);
+}
+
+/**
+ * Squash-merge an approved PR whose checks are green.
+ *
+ * Approval is taken from the review history and not re-checked against the
+ * commit it was left on, so the agent's own merges with the base and conflict
+ * resolutions do not cost another approval round. A later CHANGES_REQUESTED
+ * revokes it, and the merge is refused if anything landed on the branch after
+ * the checks were read.
+ */
+async function tryAutoMerge(
+  state: IssueState,
+  cfg: Config,
+  gh: GitHub,
+  pr: PullRequest,
+  checks: CheckSummary,
+  log: Logger,
+): Promise<boolean> {
+  if (!state.prNumber || pr.draft) return false;
+
+  // Never touch a PR this agent did not raise.
+  if (pr.head.ref !== state.branch) {
+    log(`refusing to merge PR #${state.prNumber}: head ${pr.head.ref} is not ${state.branch}`);
+    return false;
+  }
+
+  // Every check must have finished and passed. "none" means no checks ran at
+  // all, which is not evidence of anything.
+  if (checks.conclusion !== "success") return false;
+
+  const bots = await gh.botLogins();
+  const humanReviews = (await gh.reviews(state.repo, state.prNumber))
+    .filter((r) => !bots.includes(r.user.login))
+    .filter((r) => r.state === "APPROVED" || r.state === "CHANGES_REQUESTED");
+
+  // Last word per reviewer wins, so a CHANGES_REQUESTED after an approval
+  // revokes it and an approval after changes-requested restores it.
+  const latest = new Map<string, string>();
+  for (const r of humanReviews) latest.set(r.user.login, r.state);
+  const approvers = [...latest].filter(([, s]) => s === "APPROVED").map(([u]) => u);
+  if (approvers.length === 0) return false;
+  if ([...latest.values()].includes("CHANGES_REQUESTED")) return false;
+
+  if (pr.mergeable === false) {
+    log(`PR #${state.prNumber} is approved but not mergeable yet`);
+    return false;
+  }
+
+  // state.prTitle is what the agent proposed and what the PR was opened with,
+  // so the squash subject matches the PR rather than the issue.
+  const title = state.prTitle ?? `Resolve #${state.issue}`;
+  const res = await gh.mergePr(state.repo, state.prNumber, pr.head.sha, title);
+  if (!res.merged) {
+    log(`merge of PR #${state.prNumber} refused: ${res.message}`);
+    return false;
+  }
+
+  log(`merged PR #${state.prNumber} (approved by ${approvers.join(", ")}, ${checks.total} checks)`);
+  await finish(state, cfg, gh, "merged", log);
+  return true;
 }
 
 /**

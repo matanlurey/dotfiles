@@ -602,6 +602,32 @@ export class GitHub {
     return ok;
   }
 
+  /**
+   * Squash-merge a pull request.
+   *
+   * Deliberately passes the head sha: if anything lands on the branch between
+   * the caller's checks and this call, GitHub rejects it with a 409 rather
+   * than merging code that was never verified.
+   */
+  async mergePr(
+    repo: string,
+    number: number,
+    sha: string,
+    title: string,
+  ): Promise<{ merged: boolean; message: string }> {
+    if (this.#cfg.dryRun) return { merged: false, message: "dry run" };
+    try {
+      const res = await this.request<{ merged: boolean; message: string }>(
+        `/repos/${repo}/pulls/${number}/merge`,
+        { method: "PUT", body: { merge_method: "squash", sha, commit_title: title } },
+      );
+      return { merged: res.merged === true, message: res.message ?? "" };
+    } catch (e) {
+      if (e instanceof GitHubError) return { merged: false, message: `${e.status}: ${e.message}` };
+      throw e;
+    }
+  }
+
   async updatePrTitle(repo: string, number: number, title: string): Promise<void> {
     if (this.#cfg.dryRun) return;
     await this.request(`/repos/${repo}/pulls/${number}`, {

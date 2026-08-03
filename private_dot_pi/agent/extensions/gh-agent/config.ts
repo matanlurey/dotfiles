@@ -87,6 +87,16 @@ export type Config = {
    * Empty falls back to the issue's author.
    */
   reviewers: string[];
+  /**
+   * Squash-merge a PR once a human has approved it and CI is green.
+   *
+   * The approval is not re-checked against the commit it was left on, so the
+   * agent's own merges with the base branch and conflict resolutions do not
+   * cost another approval round. That is a deliberate trade: an approval can
+   * outlive the exact diff it was given for. Branch protection with
+   * dismiss_stale_reviews is what would tighten this, server-side.
+   */
+  autoMerge: boolean;
   /** Wall-clock ceiling for a single phase. The hard budget. */
   phaseTimeoutMinutes: number;
 };
@@ -121,6 +131,8 @@ const DEFAULTS: Omit<Config, "apps"> = {
   dryRun: false,
   branchPrefix: "agent/",
   openPrAsDraft: true,
+  // Off unless asked for: it is the one action the agent cannot take back.
+  autoMerge: false,
   reviewers: [],
   phaseTimeoutMinutes: 25,
 };
