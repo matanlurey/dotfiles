@@ -1591,6 +1591,45 @@ export async function step(
 }
 
 /** Best-effort failing-job logs for the CI fix prompt. */
+/**
+ * Pull the part of a CI log that explains the failure.
+ *
+ * Tailing is wrong: a job keeps working after a test fails, so the end of the
+ * log is upload and cleanup noise. One real example had the failure 21% in,
+ * and a 6000 character tail delivered the codecov uploader's gpg output. The
+ * agent, given that and no credentials to look further, drove a browser to the
+ * Actions page instead, for fourteen minutes.
+ */
+export function excerptFailure(raw: string): string {
+  const lines = raw
+    .split("\n")
+    // Drop the ISO timestamp each line is prefixed with, and ANSI colour.
+    .map((l) => l.replace(/^\S+Z /, "").replace(/\u001b\[[0-9;]*m/g, ""));
+
+  const marker =
+    /(^|\s)(FAILED|panicked|error\[E?\d+\]|error:|assertion .*failed|##\[error\]|test result: FAILED|failures:)/;
+  const hits = lines.map((l, i) => [i, l] as const).filter(([, l]) => marker.test(l));
+  if (hits.length === 0) return lines.slice(-120).join("\n");
+
+  // Windows around each hit, merged where they overlap, so a failure and the
+  // assertion output below it stay together instead of arriving as fragments.
+  const spans: [number, number][] = [];
+  for (const [i] of hits) {
+    const span: [number, number] = [Math.max(0, i - 15), Math.min(lines.length, i + 45)];
+    const last = spans[spans.length - 1];
+    if (last && span[0] <= last[1]) last[1] = Math.max(last[1], span[1]);
+    else spans.push(span);
+  }
+
+  const out: string[] = [];
+  for (const [a, b] of spans) {
+    if (out.length) out.push(`... (${a - 1} lines omitted) ...`);
+    out.push(...lines.slice(a, b));
+    if (out.join("\n").length > 8000) break;
+  }
+  return out.join("\n").slice(0, 8000);
+}
+
 async function failureLogs(
   state: IssueState,
   checks: { failing: { name: string; url: string }[] },
@@ -1614,9 +1653,7 @@ async function failureLogs(
         },
       );
       if (res.ok) {
-        const text = await res.text();
-        // Tail is where the failure actually is; the head is setup noise.
-        out.push(`### ${f.name}\n${text.slice(-6000)}`);
+        out.push(`### ${f.name}\n${excerptFailure(await res.text())}`);
       }
     } catch {
       // Logs are a nice-to-have; the agent can still reproduce locally.
