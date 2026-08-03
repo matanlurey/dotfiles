@@ -76,6 +76,14 @@ export type IssueState = {
    * requests and a few hundred per poll.
    */
   statusLabel: string | null;
+  /**
+   * How many times stepping this issue has failed in a row, and with what.
+   *
+   * A step that fails the same way every cycle will never succeed on its own,
+   * and retrying it forever buries real work in the log.
+   */
+  consecutiveFailures: number;
+  lastFailure: string | null;
   /** pi session id, stable per issue so phases share one conversation. */
   sessionId: string;
   /**
@@ -134,6 +142,8 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     reviewRequestedFrom: raw.reviewRequestedFrom ?? [],
     pendingComments: raw.pendingComments ?? [],
     statusLabel: raw.statusLabel ?? null,
+    consecutiveFailures: raw.consecutiveFailures ?? 0,
+    lastFailure: raw.lastFailure ?? null,
     worktree: raw.worktree ?? null,
     lastCiSha: raw.lastCiSha ?? null,
     note: raw.note ?? null,
@@ -205,6 +215,8 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     reviewRequestedFrom: [],
     pendingComments: [],
     statusLabel: null,
+    consecutiveFailures: 0,
+    lastFailure: null,
     sessionId: `gh-agent-${key(repo, issue)}`,
     statusCommentId: null,
     handledCommentIds: [],

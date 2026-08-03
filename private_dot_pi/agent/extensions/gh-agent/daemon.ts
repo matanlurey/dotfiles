@@ -331,6 +331,14 @@ async function reconcile(
  */
 const inFlight = new Map<string, Promise<void>>();
 
+/**
+ * Identical step failures tolerated before an issue is paused for a human.
+ *
+ * A leftover git branch once made three issues fail the same way 1037 times,
+ * every 60s, with nothing to stop it.
+ */
+const MAX_STEP_FAILURES = 3;
+
 async function cycle(cfg: Config, gh: GitHub): Promise<void> {
   const repos = await resolveRepos(cfg, gh);
   if (repos.length === 0) {
@@ -412,8 +420,36 @@ async function cycle(cfg: Config, gh: GitHub): Promise<void> {
         // Re-read: reconcile may have advanced the phase since we queued it.
         const fresh = readState(state.repo, state.issue) ?? state;
         await step(fresh, cfg, new GitHub(cfg), log);
+        if (fresh.consecutiveFailures > 0) {
+          fresh.consecutiveFailures = 0;
+          fresh.lastFailure = null;
+          writeState(fresh);
+        }
       } catch (e) {
-        log(`step failed for ${key}: ${(e as Error).message}`);
+        const msg = (e as Error).message;
+        const fresh = readState(state.repo, state.issue) ?? state;
+        // Only count it as a repeat when it is the same failure. A different
+        // error means something changed and the issue deserves a fresh budget.
+        fresh.consecutiveFailures = fresh.lastFailure === msg ? fresh.consecutiveFailures + 1 : 1;
+        fresh.lastFailure = msg;
+        writeState(fresh);
+
+        if (fresh.consecutiveFailures >= MAX_STEP_FAILURES) {
+          log(`giving up on ${key} after ${fresh.consecutiveFailures} identical failures: ${msg}`);
+          try {
+            await pause(
+              fresh,
+              new GitHub(cfg),
+              cfg,
+              `I hit the same error ${fresh.consecutiveFailures} times in a row and can't get past it:\n\n\`\`\`\n${msg.slice(0, 500)}\n\`\`\`\n\nRemove and re-add the \`${cfg.label}\` label once it's sorted and I'll pick it back up.`,
+              log,
+            );
+          } catch (pauseErr) {
+            log(`could not pause ${key}: ${(pauseErr as Error).message}`);
+          }
+        } else {
+          log(`step failed for ${key} (${fresh.consecutiveFailures}/${MAX_STEP_FAILURES}): ${msg}`);
+        }
       } finally {
         releaseLock(state.repo, state.issue);
         inFlight.delete(key);

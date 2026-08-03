@@ -197,6 +197,19 @@ export function scrub(text: string): string {
     .replace(/x-access-token:[^@\s]+/g, "x-access-token:***");
 }
 
+/** Worktree paths that currently have the given branch checked out. */
+async function worktreesHolding(clone: string, branch: string): Promise<string[]> {
+  const res = await exec("git", ["worktree", "list", "--porcelain"], { cwd: clone });
+  if (res.code !== 0) return [];
+  const held: string[] = [];
+  let current: string | null = null;
+  for (const line of res.stdout.split("\n")) {
+    if (line.startsWith("worktree ")) current = line.slice("worktree ".length).trim();
+    else if (line.trim() === `branch refs/heads/${branch}` && current) held.push(current);
+  }
+  return held;
+}
+
 export async function ensureWorktree(
   state: IssueState,
   cfg: Config,
@@ -212,14 +225,37 @@ export async function ensureWorktree(
   fs.rmSync(wt, { recursive: true, force: true });
   await exec("git", ["worktree", "prune"], { cwd: clone });
 
+  // A branch checked out in some other worktree cannot be reset, even with -B.
+  // That happens when a path changes or an earlier run left one registered, so
+  // detach any worktree still holding this branch before touching it.
+  for (const held of await worktreesHolding(clone, state.branch)) {
+    if (held === wt) continue;
+    log(`detaching stale worktree ${held} holding ${state.branch}`);
+    await exec("git", ["worktree", "remove", "--force", held], { cwd: clone });
+  }
+  await exec("git", ["worktree", "prune"], { cwd: clone });
+
   // Reuse the branch if a previous run already pushed it, else branch from base.
   const existing = await exec("git", ["rev-parse", "--verify", `origin/${state.branch}`], {
     cwd: clone,
   });
+
+  // A PR means the remote branch must exist. If it doesn't, something outside
+  // this agent deleted it, and resetting from base would quietly throw away
+  // reviewed work, so stop instead.
+  if (existing.code !== 0 && state.prNumber) {
+    throw new Error(
+      `PR #${state.prNumber} exists but origin/${state.branch} is gone; refusing to recreate it from ${base}`,
+    );
+  }
+
+  // -B in both cases, not -b. An aborted run can leave a local branch with no
+  // remote, and -b fails outright on that, which retried every cycle forever.
+  // Resetting is safe here precisely because there is no PR and no remote.
   const args =
     existing.code === 0
       ? ["worktree", "add", "--force", wt, "-B", state.branch, `origin/${state.branch}`]
-      : ["worktree", "add", "--force", wt, "-b", state.branch, `origin/${base}`];
+      : ["worktree", "add", "--force", wt, "-B", state.branch, `origin/${base}`];
 
   const res = await exec("git", args, { cwd: clone, timeoutMs: 120_000 });
   if (res.code !== 0) throw new Error(`worktree add failed: ${res.stderr}`);
