@@ -304,13 +304,12 @@ async function reconcile(
       const issue = await gh.getIssue(state.repo, state.issue);
       const wanted = cfg.reviewers?.length ? cfg.reviewers : [issue.user.login];
       try {
-        const assignable = await gh.assignableFrom(state.repo, wanted);
-        if (assignable.length > 0) {
-          await gh.requestReview(state.repo, prNumber, assignable);
-          await gh.addAssignees(state.repo, prNumber, assignable);
-          state.reviewRequestedFrom = assignable;
+        const reviewers = await gh.canReview(state.repo, wanted);
+        if (reviewers.length > 0) {
+          await gh.requestReview(state.repo, prNumber, reviewers);
+          state.reviewRequestedFrom = reviewers;
           writeState(state);
-          log(`requested review from ${assignable.join(", ")} on PR #${prNumber}`);
+          log(`requested review from ${reviewers.join(", ")} on PR #${prNumber}`);
         }
       } catch (e) {
         log(`review request failed: ${(e as Error).message}`);

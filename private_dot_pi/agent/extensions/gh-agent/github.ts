@@ -563,10 +563,11 @@ export class GitHub {
   }
 
   /**
-   * Ask specific people to review, and assign them.
+   * Ask specific people to review.
    *
-   * The App's own bot cannot be assigned to anything, so this is how a PR gets
-   * into a human's review queue and their assigned list.
+   * This puts the PR in their review queue without assigning it to them. The
+   * agent stays responsible for the work; the human is only being asked to
+   * look.
    */
   async requestReview(repo: string, number: number, logins: string[]): Promise<void> {
     if (this.#cfg.dryRun || logins.length === 0) return;
@@ -581,23 +582,21 @@ export class GitHub {
     }
   }
 
-  async addAssignees(repo: string, issue: number, logins: string[]): Promise<void> {
-    if (this.#cfg.dryRun || logins.length === 0) return;
-    await this.request(`/repos/${repo}/issues/${issue}/assignees`, {
-      method: "POST",
-      body: { assignees: logins },
-    });
-  }
-
-  /** Filter to logins GitHub will actually accept as an assignee. */
-  async assignableFrom(repo: string, logins: string[]): Promise<string[]> {
+  /**
+   * Filter to logins that can actually review in this repo.
+   *
+   * The assignees endpoint is the available proxy for "has access here": it
+   * rejects bots and non-collaborators, which are the same logins a review
+   * request would silently 422 on.
+   */
+  async canReview(repo: string, logins: string[]): Promise<string[]> {
     const ok: string[] = [];
     for (const login of logins) {
       try {
         await this.request(`/repos/${repo}/assignees/${encodeURIComponent(login)}`);
         ok.push(login);
       } catch {
-        // Bots and non-collaborators cannot be assigned.
+        // Bots and non-collaborators have no access to review.
       }
     }
     return ok;

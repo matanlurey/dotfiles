@@ -800,9 +800,10 @@ async function handleTimeout(
 /**
  * Put the PR in a human's review queue.
  *
- * The bot cannot assign itself, and an unassigned PR from a bot is easy to
- * miss, so review is requested from the configured reviewers (falling back to
- * whoever filed the issue) and they are assigned too.
+ * Review is requested from the configured reviewers, falling back to whoever
+ * filed the issue. Reviewers are deliberately not assigned: assignment means
+ * "responsible for the work" and the agent owns that, while review request
+ * means "your input is wanted", which is the accurate ask.
  */
 async function requestHumanReview(
   state: IssueState,
@@ -814,16 +815,15 @@ async function requestHumanReview(
   if (cfg.dryRun || !state.prNumber) return;
   const wanted = cfg.reviewers?.length ? cfg.reviewers : [issueAuthor];
   try {
-    const assignable = await gh.assignableFrom(state.repo, wanted);
-    if (assignable.length === 0) {
-      log(`no assignable reviewers among ${wanted.join(", ")}`);
+    const reviewers = await gh.canReview(state.repo, wanted);
+    if (reviewers.length === 0) {
+      log(`no eligible reviewers among ${wanted.join(", ")}`);
       return;
     }
-    await gh.requestReview(state.repo, state.prNumber, assignable);
-    await gh.addAssignees(state.repo, state.prNumber, assignable);
-    state.reviewRequestedFrom = assignable;
+    await gh.requestReview(state.repo, state.prNumber, reviewers);
+    state.reviewRequestedFrom = reviewers;
     writeState(state);
-    log(`requested review from ${assignable.join(", ")} on PR #${state.prNumber}`);
+    log(`requested review from ${reviewers.join(", ")} on PR #${state.prNumber}`);
   } catch (e) {
     log(`review request failed: ${(e as Error).message}`);
   }

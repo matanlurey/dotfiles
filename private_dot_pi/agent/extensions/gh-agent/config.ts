@@ -82,7 +82,8 @@ export type Config = {
    */
   openPrAsDraft: boolean;
   /**
-   * Who to request review from, and assign, once a PR needs a human.
+   * Who to request review from once a PR needs a human. They are asked to
+   * review, not assigned: the agent stays responsible for the work.
    * Empty falls back to the issue's author.
    */
   reviewers: string[];
