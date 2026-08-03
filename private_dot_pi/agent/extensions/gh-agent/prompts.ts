@@ -8,6 +8,7 @@
  */
 
 import type { CheckSummary, Issue, Review, ReviewComment } from "./github.ts";
+import type { PendingComment } from "./state.ts";
 
 export const VERDICT_START = "<<<AGENT_VERDICT>>>";
 export const VERDICT_END = "<<<END_AGENT_VERDICT>>>";
@@ -160,7 +161,7 @@ export function reviewResponsePrompt(
   issue: Issue,
   reviews: Review[],
   comments: ReviewComment[],
-  conversation: string[] = [],
+  conversation: PendingComment[] = [],
 ): string {
   const ids = comments.map((c) => c.id);
   const reviewText = reviews
@@ -179,7 +180,12 @@ export function reviewResponsePrompt(
 
 ${
     conversation.length
-      ? `## Comments addressed to you\n\nThese were left on the issue or the pull request conversation. Treat them as direct instructions and do what they ask.\n\n${conversation.join("\n\n")}`
+      ? `## Comments addressed to you\n\nTreat these as direct instructions and do what they ask. Note where each one was left: your answer is posted back to the same place, so do not assume the reader is looking at the pull request diff.\n\n${conversation
+          .map(
+            (c) =>
+              `### @${c.author} on the ${c.source === "issue" ? "issue" : "pull request"}${c.url ? ` (${c.url})` : ""}\n\n${c.body}`,
+          )
+          .join("\n\n")}`
       : ""
   }
 

@@ -199,7 +199,20 @@ async function reconcile(
       }
       state.handledCommentIds.push(...onIssue.map((c) => c.id));
       state.handledPrCommentIds.push(...onPr.map((c) => c.id));
-      state.pendingComments = conversation.map((c) => `@${c.user.login}: ${c.body}`);
+      state.pendingComments = [
+        ...onIssue.map((c) => ({
+          source: "issue" as const,
+          author: c.user.login,
+          body: c.body,
+          url: c.html_url ?? null,
+        })),
+        ...onPr.map((c) => ({
+          source: "pr" as const,
+          author: c.user.login,
+          body: c.body,
+          url: c.html_url ?? null,
+        })),
+      ];
       state.phase = "responding";
       writeState(state);
       log(

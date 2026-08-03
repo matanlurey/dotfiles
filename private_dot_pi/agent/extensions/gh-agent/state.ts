@@ -37,6 +37,20 @@ export type Phase =
   | "done"
   | "abandoned";
 
+/**
+ * A comment awaiting an answer, and where it was left.
+ *
+ * The surface matters: an issue comment answered on the pull request reads as
+ * an unprompted change, because the reader is not looking at what it replies
+ * to. Answers go back where the question was asked.
+ */
+export type PendingComment = {
+  source: "issue" | "pr";
+  author: string;
+  body: string;
+  url: string | null;
+};
+
 export type IssueState = {
   repo: string;
   issue: number;
@@ -69,7 +83,7 @@ export type IssueState = {
    * Carried through state because reconcile finds them but the worker is what
    * renders the prompt.
    */
-  pendingComments: string[];
+  pendingComments: PendingComment[];
   /**
    * The agent:* label last published, so a cycle can skip the API calls when
    * nothing changed. With a deep queue that is the difference between a few
@@ -140,7 +154,13 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     followUpsFiled: raw.followUpsFiled ?? [],
     lastPush: raw.lastPush ?? null,
     reviewRequestedFrom: raw.reviewRequestedFrom ?? [],
-    pendingComments: raw.pendingComments ?? [],
+    // Older states stored bare strings with no idea where they came from,
+    // which is what let an issue comment be answered on the pull request.
+    pendingComments: (raw.pendingComments ?? []).map((c: unknown) =>
+      typeof c === "string"
+        ? { source: "issue" as const, author: "", body: c, url: null }
+        : (c as PendingComment),
+    ),
     statusLabel: raw.statusLabel ?? null,
     consecutiveFailures: raw.consecutiveFailures ?? 0,
     lastFailure: raw.lastFailure ?? null,

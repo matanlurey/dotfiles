@@ -34,6 +34,8 @@ export type Comment = {
   body: string;
   user: { login: string; type: string };
   created_at: string;
+  /** Permalink, so an answer can point at what it is answering. */
+  html_url?: string;
 };
 
 export type PullRequest = {

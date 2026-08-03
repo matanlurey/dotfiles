@@ -1320,10 +1320,19 @@ export async function step(
             verdict.reply ??
             verdict.replies[0]?.body ??
             truncate(stripVerdict(verdict.summary), 600);
+
+          // Answer where the question was asked. An issue comment answered on
+          // the pull request reads as an unprompted change, because the reader
+          // is not looking at the thing it replies to.
+          const askedOnIssue = conversation.some((c) => c.source === "issue");
+          const target = askedOnIssue ? state.issue : prNumber;
+          const answering = conversation.find((c) => c.url)?.url;
+          const attribution = answering ? `Replying to ${answering}\n\n` : "";
+
           await gh.comment(
             state.repo,
-            prNumber,
-            `${fallback}${committed ? "" : "\n\nNo code changes were needed this round."}${SIG}`,
+            target,
+            `${attribution}${fallback}${committed ? "" : "\n\nNo code changes were needed this round."}${SIG}`,
           );
         }
       }
