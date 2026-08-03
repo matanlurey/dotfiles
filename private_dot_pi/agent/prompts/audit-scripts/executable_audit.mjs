@@ -73,6 +73,26 @@ function parseIntent(summary) {
 	return { intent: m[1].toLowerCase(), text: rest };
 }
 
+// `hunk session comment list --type user` returns a different shape than the
+// --type live/agent view tested against earlier: noteId (not commentId), body
+// (not summary), newRange/oldRange (not line+side) - confirmed against a real
+// human-authored comment, not assumed. These normalize either shape so a stray
+// CLI-added comment wouldn't crash this either.
+function commentId(c) {
+	return c.commentId ?? c.noteId;
+}
+
+function commentText(c) {
+	return c.summary ?? c.body ?? "";
+}
+
+function commentLineAndSide(c) {
+	if (Array.isArray(c.newRange)) return { line: c.newRange[c.newRange.length - 1], side: "new" };
+	if (Array.isArray(c.oldRange)) return { line: c.oldRange[c.oldRange.length - 1], side: "old" };
+	if (typeof c.line === "number" && c.side) return { line: c.line, side: c.side };
+	return { line: null, side: null };
+}
+
 function chunked(arr, size) {
 	const out = [];
 	for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -346,7 +366,7 @@ function cmdPendingComments() {
 
 	const { comments } = JSON.parse(listResult.stdout);
 	const triage = readJson(triagePath(root, ledger.targetSlug), { version: 1, comments: {} });
-	const pending = comments.filter((c) => !(c.commentId in triage.comments));
+	const pending = comments.filter((c) => !(commentId(c) in triage.comments));
 
 	if (pending.length === 0) {
 		console.log(`No new comments to triage (${comments.length} total, all already triaged).`);
@@ -356,10 +376,11 @@ function cmdPendingComments() {
 
 	const lines = [`${pending.length} comment(s) pending triage (${comments.length - pending.length} already triaged):`, ""];
 	for (const c of pending) {
-		const { intent, text } = parseIntent(c.summary);
-		lines.push(`- commentId: ${c.commentId}`);
+		const { intent, text } = parseIntent(commentText(c));
+		const { line, side } = commentLineAndSide(c);
+		lines.push(`- commentId: ${commentId(c)}`);
 		lines.push(`  file: ${c.filePath}`);
-		lines.push(`  line: ${c.line} (${c.side})`);
+		lines.push(`  line: ${line} (${side})`);
 		lines.push(`  hunk: ${c.hunkIndex}`);
 		lines.push(`  intent: ${intent}`);
 		lines.push(`  text: ${text || "(none)"}`);
