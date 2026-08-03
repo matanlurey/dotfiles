@@ -249,13 +249,14 @@ zellij d myproject               # Delete session
 
 #### Pi Prompt Templates
 
-Custom slash commands (`private_dot_pi/agent/prompts/`, via `pi-prompt-template-model`) for paging through a path/glob in Hunk, batched — reviewing and discussing it is just the `hunk-review` skill above from there.
+Custom slash commands (`private_dot_pi/agent/prompts/`, via `pi-prompt-template-model`). `/audit`, `/audit-next`, and `/audit-prev` page through a path/glob in Hunk, batched — reviewing and discussing it from there is just the `hunk-review` skill above. `/deep-dive` is a standalone structured review prompt, independent of Hunk.
 
 | Command | What it does |
 |---------|---------------|
 | **/audit \<path-or-glob\>** | Enumerates non-ignored, non-generated, non-binary files under the target, splits them into batches, and opens batch 1 in your live Hunk session. Resumable — re-running the same target continues from wherever you left off; `--fresh` restarts it; `--batch-size N` overrides the default of 8 |
 | **/audit-next** | Opens the next batch in Hunk |
 | **/audit-prev** | Opens the previous batch in Hunk |
+| **/deep-dive \<path\> [focus]** | Reads every file under the path, then checks it against real callers/exports (dead public API), test coverage of edge/error/interaction paths, project conventions (README/lint/type-check/test), and asymmetries between sibling variants (e.g. sync vs. async). Reports findings as Conventional Comments grouped by file with a summary table; optional trailing args add extra focus for that pass |
 
 The bookkeeping (enumeration, batching, current position, resuming) lives in `private_dot_pi/agent/prompts/audit-scripts/audit.mjs` — a plain Node script, not a Pi extension, since none of this needs a persistent background process or a live status widget.
 
