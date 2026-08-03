@@ -11,6 +11,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { Config } from "./config.ts";
@@ -703,9 +704,30 @@ const ALL_STATUS_LABELS = [
   "agent:working",
   "agent:queued",
   "agent:in-review",
+  "agent:merging",
   "agent:needs-input",
   "agent:paused",
 ];
+
+/**
+ * The label for a phase, given what has happened to the PR.
+ *
+ * agent:in-review means "your turn". Once someone has approved it is the
+ * agent's turn again, either merging or waiting on checks, and leaving the
+ * label alone made approved work look like it was still queued for review.
+ */
+function statusFor(state: IssueState): { label: string; color: string; blurb: string } | undefined {
+  const entry = STATUS_LABEL[state.phase];
+  if (!entry) return undefined;
+  if (state.phase === "awaiting_review" && state.approvedBy) {
+    return {
+      label: "agent:merging",
+      color: "0052CC",
+      blurb: "Approved. Merging once checks are green.",
+    };
+  }
+  return entry;
+}
 
 /**
  * Mark an issue as started but not currently progressing.
@@ -760,9 +782,11 @@ function waitingOn(state: IssueState): string | undefined {
   switch (state.phase) {
     case "awaiting_review":
       if (!state.prNumber) return "**Waiting for a human to review.**";
-      return state.approvedBy
-        ? `**Approved by @${state.approvedBy}. Waiting for a human to merge #${state.prNumber}.** I don't merge my own work.`
-        : `**Waiting for a human to review and approve #${state.prNumber}.** I won't merge it myself.`;
+      // Approved is not a waiting state any more: with autoMerge the agent
+      // squash-merges once checks pass, so saying it waits for a human to
+      // merge is simply wrong.
+      if (state.approvedBy) return undefined;
+      return `**Waiting for a human to review and approve #${state.prNumber}.**`;
     case "blocked":
       return "**Waiting for a human to answer my question.** Reply on this issue and I'll pick it straight back up.";
     case "paused":
@@ -786,7 +810,7 @@ export async function publishStatus(
   log: Logger,
   detail?: string,
 ): Promise<void> {
-  const entry = STATUS_LABEL[state.phase];
+  const entry = statusFor(state);
   if (!entry) return;
 
   if (cfg.dryRun) {
@@ -833,11 +857,23 @@ export async function publishStatus(
     .filter(Boolean)
     .join("\n\n");
 
+  // Skip the write when only the timestamp moved.
+  //
+  // The footer embeds the current time, so every body differed and each cycle
+  // sent a PATCH per issue, restating the same thing and filling the comment's
+  // edit history with nothing.
+  const digest = createHash("sha1")
+    .update(body.replace(/Updated \d{4}-\d{2}-\d{2} \d{2}:\d{2}Z/, ""))
+    .digest("hex");
+  if (state.statusDigest === digest && state.statusCommentId !== null) return;
+
   try {
     // Reuse the cached id when we have it; otherwise find or create the comment
     // and remember it so later progress ticks are a single PATCH.
     if (state.statusCommentId !== null) {
       await gh.updateComment(state.repo, state.statusCommentId, body);
+      state.statusDigest = digest;
+      writeState(state);
       return;
     }
     const existing = (await gh.issueComments(state.repo, state.issue)).find((c) =>
@@ -850,6 +886,7 @@ export async function publishStatus(
       const created = await gh.comment(state.repo, state.issue, body);
       if (created) state.statusCommentId = created.id;
     }
+    state.statusDigest = digest;
     writeState(state);
   } catch (e) {
     log(`status comment failed: ${(e as Error).message}`);

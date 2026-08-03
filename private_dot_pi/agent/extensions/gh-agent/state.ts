@@ -90,6 +90,8 @@ export type IssueState = {
    * requests and a few hundred per poll.
    */
   statusLabel: string | null;
+  /** Digest of the last status comment body, ignoring its timestamp. */
+  statusDigest: string | null;
   /**
    * How many times stepping this issue has failed in a row, and with what.
    *
@@ -162,6 +164,7 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
         : (c as PendingComment),
     ),
     statusLabel: raw.statusLabel ?? null,
+    statusDigest: raw.statusDigest ?? null,
     consecutiveFailures: raw.consecutiveFailures ?? 0,
     lastFailure: raw.lastFailure ?? null,
     worktree: raw.worktree ?? null,
@@ -235,6 +238,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     reviewRequestedFrom: [],
     pendingComments: [],
     statusLabel: null,
+    statusDigest: null,
     consecutiveFailures: 0,
     lastFailure: null,
     sessionId: `gh-agent-${key(repo, issue)}`,
