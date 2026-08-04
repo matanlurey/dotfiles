@@ -247,6 +247,7 @@ zellij d myproject               # Delete session
 | **simplify** | Reviews code for word choice, structure, and overfitting before it's ready for human review (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **done** | Wraps up a finished feature — commits, rebases, merges/PRs, and cleans up worktrees/workspaces (git and jj) (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **bro** | Restates the last message in plain human language, no jargon (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
+| **handoff** | Compacts the current conversation into a handoff document (saved to the OS temp dir) for another agent to pick up, with suggested next skills (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
 
 #### Pi Prompt Templates
 
