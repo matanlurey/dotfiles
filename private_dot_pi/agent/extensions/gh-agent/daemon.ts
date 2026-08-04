@@ -145,6 +145,24 @@ async function reconcile(
     if (fresh.length === 0) return false;
     state.handledCommentIds.push(...onIssue.map((c) => c.id));
     state.handledPrCommentIds.push(...onPr.map((c) => c.id));
+    // Carry the answer forward. Marking it handled without queueing it left
+    // the responding phase with nothing to act on, so it correctly declined to
+    // run and the reply was consumed and dropped: the agent thanked the human
+    // for answering and then ignored what they said.
+    state.pendingComments = [
+      ...onIssue.map((c) => ({
+        source: "issue" as const,
+        author: c.user.login,
+        body: c.body,
+        url: c.html_url ?? null,
+      })),
+      ...onPr.map((c) => ({
+        source: "pr" as const,
+        author: c.user.login,
+        body: c.body,
+        url: c.html_url ?? null,
+      })),
+    ];
     // Resume where we left off: before a PR exists we re-plan, after it we treat
     // the answer as review-style feedback.
     state.phase = state.prNumber === null ? "planning" : "responding";
