@@ -246,6 +246,7 @@ zellij d myproject               # Delete session
 | **hunk-review** | Drives live Hunk diff-review sessions via CLI — inspects focus, navigates files/hunks, and adds inline review comments (bundled with `hunk`, copied via `hunk skill path`) |
 | **simplify** | Reviews code for word choice, structure, and overfitting before it's ready for human review (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **done** | Wraps up a finished feature — commits, rebases, merges/PRs, and cleans up worktrees/workspaces (git and jj) (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
+| **bro** | Restates the last message in plain human language, no jargon (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
 
 #### Pi Prompt Templates
 
