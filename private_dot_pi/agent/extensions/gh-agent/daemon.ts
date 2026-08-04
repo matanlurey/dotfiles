@@ -262,7 +262,18 @@ async function reconcile(
     // mergeable is computed lazily and is null until GitHub finishes, which is
     // not the same as conflicted; leave those for a later cycle.
     const conflicted = pr.mergeable === false || pr.mergeable_state === "dirty";
-    const behind = pr.mergeable_state === "behind";
+
+    // Being behind the base is only worth a merge when the repo actually
+    // refuses to merge stale branches.
+    //
+    // Otherwise it is pure churn, and self-amplifying: every merge moves the
+    // base, which puts every other open PR behind, each of which commits a
+    // merge and pushes, and each push fires the full workflow set. With a
+    // busy agent that loop generates most of the repo's CI volume and can
+    // exhaust the Actions token's per-repo hourly budget, which is what broke
+    // the Check semver job on #1072.
+    const behind = pr.mergeable_state === "behind" && (await gh.requiresUpToDate(state.repo));
+
     if (conflicted || behind) {
       if (state.mergeAttempts >= 3) {
         await pause(

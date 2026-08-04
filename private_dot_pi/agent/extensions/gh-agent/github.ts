@@ -138,6 +138,7 @@ export class GitHubError extends Error {
 }
 
 export class GitHub {
+  readonly #strictBase = new Map<string, boolean>();
   #cfg: Config;
   /** "<appId>:<installationId>" -> token. */
   #tokens = new Map<string, { token: string; expiresAt: number }>();
@@ -602,6 +603,30 @@ export class GitHub {
       }
     }
     return ok;
+  }
+
+  /**
+   * Whether the base branch refuses to merge a PR that is behind it.
+   *
+   * Cached: it is a repo-level setting that changes about never, and asking
+   * once per PR per cycle is exactly the kind of avoidable traffic that
+   * starves the repo's own CI.
+   */
+  async requiresUpToDate(repo: string): Promise<boolean> {
+    const hit = this.#strictBase.get(repo);
+    if (hit !== undefined) return hit;
+    let strict = false;
+    try {
+      const base = await this.defaultBranch(repo);
+      const prot = await this.request<{ required_status_checks?: { strict?: boolean } }>(
+        `/repos/${repo}/branches/${encodeURIComponent(base)}/protection`,
+      );
+      strict = prot.required_status_checks?.strict === true;
+    } catch {
+      // 404 means unprotected, which cannot require anything.
+    }
+    this.#strictBase.set(repo, strict);
+    return strict;
   }
 
   /**
