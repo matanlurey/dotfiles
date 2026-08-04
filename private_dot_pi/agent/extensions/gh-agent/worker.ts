@@ -311,12 +311,39 @@ async function push(
   const wt = state.worktree as string;
   // "origin" resolves to the plain URL in the shared clone config; the helper
   // supplies credentials without persisting them.
-  const res = await gitAuthed(
-    state.repo,
-    gh,
-    ["push", "--set-upstream", "origin", state.branch],
-    { cwd: wt, timeoutMs: 5 * 60 * 1000 },
-  );
+  const doPush = () =>
+    gitAuthed(state.repo, gh, ["push", "--set-upstream", "origin", state.branch], {
+      cwd: wt,
+      timeoutMs: 5 * 60 * 1000,
+    });
+
+  let res = await doPush();
+
+  // The remote branch can move without this worktree knowing: GitHub's "Update
+  // branch" button commits a merge straight onto the head branch. The push is
+  // then rejected as non-fast-forward and retrying cannot help.
+  //
+  // Force-pushing would fix it and is exactly what must not happen, so bring
+  // the remote work in instead and push the result.
+  if (res.code !== 0 && /non-fast-forward|fetch first|rejected/.test(res.stderr)) {
+    log(`push rejected for ${state.branch}; merging the remote branch before retrying`);
+    await gitAuthed(state.repo, gh, ["fetch", "origin", state.branch], { cwd: wt });
+
+    const merge = await exec(
+      "git",
+      ["merge", "--no-edit", "-m", `Merge remote ${state.branch}`, `origin/${state.branch}`],
+      { cwd: wt },
+    );
+    if (merge.code !== 0) {
+      await exec("git", ["merge", "--abort"], { cwd: wt });
+      throw new Error(
+        `the remote branch has commits I don't have and they conflict with mine. ` +
+          `Someone may have edited the branch directly. Resolve it on the branch and I'll continue.`,
+      );
+    }
+    res = await doPush();
+  }
+
   if (res.code !== 0) throw new Error(`push failed: ${scrub(res.stderr)}`);
 
   // Record what this push was for so the status comment can report one line
