@@ -249,6 +249,7 @@ zellij d myproject               # Delete session
 | **bro** | Restates the last message in plain human language, no jargon (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
 | **handoff** | Compacts the current conversation into a handoff document (saved to the OS temp dir) for another agent to pick up, with suggested next skills (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
 | **writing-great-skills** | Reference for writing and editing skills well — vocabulary and principles for predictable skills, plus a glossary (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
+| **hashi-style** | Write and review code in the style of Mitchell Hashimoto's open source work — declaration comments carrying design rationale and caller contracts, sparse narrative body comments, machine-checked invariants, behavior-named colocated tests |
 
 #### Pi Prompt Templates
 
