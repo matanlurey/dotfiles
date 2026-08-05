@@ -10,6 +10,7 @@ diff-formatter = ":git"
 
 [aliases]
 push = ["util", "exec", "--", "jj-hp", "push"]
+fresh = ["util", "exec", "--", "bash", "-c", "set -euo pipefail\njj git fetch\njj new main@origin", ""]
 
 [merge-tools.delta]
 program = "delta"

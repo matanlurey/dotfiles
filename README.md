@@ -250,6 +250,12 @@ zellij d myproject               # Delete session
 | **handoff** | Compacts the current conversation into a handoff document (saved to the OS temp dir) for another agent to pick up, with suggested next skills (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
 | **writing-great-skills** | Reference for writing and editing skills well — vocabulary and principles for predictable skills, plus a glossary (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
 | **hashi-style** | Write and review code in the style of Mitchell Hashimoto's open source work — declaration comments carrying design rationale and caller contracts, sparse narrative body comments, machine-checked invariants, behavior-named colocated tests |
+| **codebase-design** | Shared vocabulary for designing deep modules — module, interface, seam, adapter, leverage, locality — plus dependency-category guidance for deepening and a design-it-twice parallel sub-agent pattern (adapted from [mattpocock/skills](https://github.com/mattpocock/skills)) |
+| **improve-codebase-architecture** | Scans a codebase for deepening opportunities, presents them as a visual HTML report (Tailwind + Mermaid), then grills through whichever candidate you pick (adapted from [mattpocock/skills](https://github.com/mattpocock/skills)) |
+| **grilling** | Interviews the user relentlessly, one question at a time with a recommended answer, until a plan or decision reaches shared understanding (adapted from [mattpocock/skills](https://github.com/mattpocock/skills)) |
+| **domain-modeling** | Builds and sharpens a project's domain model — challenges fuzzy terms, cross-references code, and keeps `CONTEXT.md`/ADRs current as decisions crystallise (adapted from [mattpocock/skills](https://github.com/mattpocock/skills)) |
+| **tdd** | Red-green-refactor discipline — seam-first testing, anti-patterns (implementation-coupled, tautological, horizontal slicing), and rules of the loop (adapted from [mattpocock/skills](https://github.com/mattpocock/skills)) |
+| **diagnosing-bugs** | Six-phase diagnosis loop for hard bugs and perf regressions — build a tight red-capable feedback loop first, then reproduce/minimise, hypothesise, instrument, fix with a regression test, and clean up (adapted from [mattpocock/skills](https://github.com/mattpocock/skills)) |
 
 #### Pi Prompt Templates
 

@@ -16,7 +16,8 @@ DESIRED='{
     "commandcode/deepseek/deepseek-v4-pro",
     "anthropic/claude-haiku-4-5-20251001",
     "anthropic/claude-sonnet-5",
-    "anthropic/claude-opus-4-8"
+    "anthropic/claude-opus-4-8",
+    "anthropic/claude-opus-5"
   ],
   "subagents": {
     "agentOverrides": {
@@ -26,8 +27,8 @@ DESIRED='{
       "delegate": { "model": "anthropic/claude-haiku-4-5-20251001" },
       "planner": { "model": "anthropic/claude-sonnet-5", "thinking": "high" },
       "worker": { "model": "anthropic/claude-sonnet-5", "thinking": "medium" },
-      "reviewer": { "model": "anthropic/claude-opus-4-8", "thinking": "high" },
-      "oracle": { "model": "anthropic/claude-opus-4-8", "thinking": "high" }
+      "reviewer": { "model": "anthropic/claude-opus-5", "thinking": "high" },
+      "oracle": { "model": "anthropic/claude-opus-5", "thinking": "high" }
     }
   },
   "packages": [
