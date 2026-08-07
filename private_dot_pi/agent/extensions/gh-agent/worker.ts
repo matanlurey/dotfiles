@@ -813,6 +813,12 @@ function waitingOn(state: IssueState): string | undefined {
       // squash-merges once checks pass, so saying it waits for a human to
       // merge is simply wrong.
       if (state.approvedBy) return undefined;
+      // Don't call it the reviewer's turn while checks are still running. They
+      // look, see pending checks, and correctly conclude there is nothing to
+      // do, which reads as the agent being stuck.
+      if (state.checksPending) {
+        return `**Checks are still running on #${state.prNumber}.** I'll ask for review once they finish.`;
+      }
       return `**Waiting for a human to review and approve #${state.prNumber}.**`;
     case "blocked":
       return "**Waiting for a human to answer my question.** Reply on this issue and I'll pick it straight back up.";

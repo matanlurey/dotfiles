@@ -80,6 +80,12 @@ function summarize(states: IssueState[]): string[] {
  * inside a shell pipeline, and it covers anything the agent might find that
  * still holds a token.
  */
+/** The first runtime-directory path mentioned in a shell command, if any. */
+function extractRuntimePath(command: string): string | undefined {
+  const m = command.match(new RegExp(`${ROOT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^\\s"';|&)]*`));
+  return m?.[0];
+}
+
 function forbiddenForWorker(command: string): string | undefined {
   const parts = command
     .split(/&&|\|\||;|\|/)
@@ -131,15 +137,58 @@ function forbiddenForWorker(command: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Whether a path reaches into the harness's own runtime directory.
+ *
+ * The worker's worktree lives under that directory, so it cannot simply be
+ * denied wholesale. Everything beside the worktrees is off limits: the App
+ * private keys and config would let a worker mint its own installation token
+ * and do anything the App can, which is every guardrail at once, and the state
+ * and logs are the harness's record of its own decisions.
+ */
+function reachesRuntime(candidate: string): boolean {
+  const resolved = path.resolve(candidate);
+  if (!resolved.startsWith(`${ROOT}${path.sep}`) && resolved !== ROOT) return false;
+  return !resolved.startsWith(path.join(ROOT, "worktrees") + path.sep);
+}
+
+const RUNTIME_DENIAL =
+  "That path is the harness's own runtime directory. It holds the app keys, " +
+  "tokens and state that keep your actions scoped, so it is not yours to read " +
+  "or write. Everything you need is in your working tree.";
+
+/** Path-like arguments a file tool might carry, in the order worth checking. */
+function toolPaths(input: unknown): string[] {
+  const i = (input ?? {}) as Record<string, unknown>;
+  const out: string[] = [];
+  for (const k of ["path", "file", "filePath", "dir", "directory", "pattern"]) {
+    if (typeof i[k] === "string") out.push(i[k] as string);
+  }
+  if (Array.isArray(i.paths)) out.push(...(i.paths as unknown[]).filter((p) => typeof p === "string") as string[]);
+  return out;
+}
+
 export default function ghAgent(pi: ExtensionAPI) {
   // Inside a worker run: install guardrails only, never the control surface.
   if (process.env.PI_GH_AGENT === "1") {
     pi.on("tool_call", async (event) => {
-      if (event.toolName !== "bash") return;
-      const command = (event.input as { command?: string }).command;
-      if (!command) return;
-      const reason = forbiddenForWorker(command);
-      if (reason) return { block: true, reason };
+      if (event.toolName === "bash") {
+        const command = (event.input as { command?: string }).command;
+        if (!command) return;
+        const reason = forbiddenForWorker(command);
+        if (reason) return { block: true, reason };
+        // Shell reaches the same files as the file tools do.
+        if (command.includes(ROOT) && reachesRuntime(extractRuntimePath(command) ?? ROOT)) {
+          return { block: true, reason: RUNTIME_DENIAL };
+        }
+        return;
+      }
+      // Every other tool that takes a path. The guard used to cover bash only,
+      // so a worker read the harness's session logs with the plain read tool
+      // and spent a 40 minute budget doing it.
+      for (const p of toolPaths(event.input)) {
+        if (reachesRuntime(p)) return { block: true, reason: RUNTIME_DENIAL };
+      }
     });
     return;
   }

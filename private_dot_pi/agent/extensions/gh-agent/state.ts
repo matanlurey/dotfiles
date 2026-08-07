@@ -92,6 +92,8 @@ export type IssueState = {
   statusLabel: string | null;
   /** Digest of the last status comment body, ignoring its timestamp. */
   statusDigest: string | null;
+  /** Whether the PR's checks were still running at the last reconcile. */
+  checksPending: boolean;
   /**
    * How many times stepping this issue has failed in a row, and with what.
    *
@@ -165,6 +167,7 @@ function migrate(raw: Partial<IssueState>, repo: string, issue: number): IssueSt
     ),
     statusLabel: raw.statusLabel ?? null,
     statusDigest: raw.statusDigest ?? null,
+    checksPending: raw.checksPending ?? false,
     consecutiveFailures: raw.consecutiveFailures ?? 0,
     lastFailure: raw.lastFailure ?? null,
     worktree: raw.worktree ?? null,
@@ -239,6 +242,7 @@ export function newState(repo: string, issue: number, branch: string): IssueStat
     pendingComments: [],
     statusLabel: null,
     statusDigest: null,
+    checksPending: false,
     consecutiveFailures: 0,
     lastFailure: null,
     sessionId: `gh-agent-${key(repo, issue)}`,

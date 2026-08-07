@@ -314,6 +314,13 @@ async function reconcile(
     // No review activity: check whether CI needs attention.
     const checks = await gh.checks(state.repo, pr.head.sha);
 
+    // Record it so the status can say "checks running" rather than claiming
+    // it is the reviewer's turn while nothing is reviewable yet.
+    if (state.checksPending !== (checks.conclusion === "pending")) {
+      state.checksPending = checks.conclusion === "pending";
+      writeState(state);
+    }
+
     if (cfg.autoMerge && (await tryAutoMerge(state, cfg, gh, pr, checks, log))) return false;
 
     if (checks.conclusion === "failure" && state.lastCiSha !== pr.head.sha) {
