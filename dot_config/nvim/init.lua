@@ -162,7 +162,7 @@ require("lazy").setup({
         install_dir = vim.fn.stdpath("data") .. "/site",
       })
       -- Install parsers not bundled with neovim
-      local parsers = { "go", "gomod", "gosum", "javascript", "typescript", "tsx", "json", "bash", "swift" }
+      local parsers = { "go", "gomod", "gosum", "javascript", "typescript", "tsx", "json", "bash", "swift", "rust" }
       for _, lang in ipairs(parsers) do
         if not pcall(vim.treesitter.language.inspect, lang) then
           vim.cmd("TSInstall " .. lang)
@@ -483,7 +483,13 @@ vim.lsp.config["sourcekit"] = {
   root_markers = { "Package.swift", ".git", "*.xcodeproj", "*.xcworkspace" },
 }
 
-vim.lsp.enable({ "ts_ls", "gopls", "sourcekit" })
+vim.lsp.config["rust_analyzer"] = {
+  cmd = { "rust-analyzer" },
+  filetypes = { "rust" },
+  root_markers = { "Cargo.toml", ".git" },
+}
+
+vim.lsp.enable({ "ts_ls", "gopls", "sourcekit", "rust_analyzer" })
 
 -- Show diagnostics on hover (automatic, no keypress needed)
 vim.diagnostic.config({
