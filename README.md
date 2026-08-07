@@ -243,7 +243,6 @@ zellij d myproject               # Delete session
 |-------|---------------|
 | **grill-me** | Conducts a rigorous technical interview on the current codebase using pi-interview |
 | **api-doc-comments** | Writes and de-slops high-quality documentation comments for public APIs (agnostic principles + TS/Python/Rust/Go references) |
-| **hunk-review** | Drives live Hunk diff-review sessions via CLI — inspects focus, navigates files/hunks, and adds inline review comments (bundled with `hunk`, copied via `hunk skill path`) |
 | **simplify** | Reviews code for word choice, structure, and overfitting before it's ready for human review (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **done** | Wraps up a finished feature — commits, rebases, merges/PRs, and cleans up worktrees/workspaces (git and jj) (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **bro** | Restates the last message in plain human language, no jargon (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
@@ -272,7 +271,7 @@ zellij d myproject               # Delete session
 
 #### Pi Prompt Templates
 
-Custom slash commands (`private_dot_pi/agent/prompts/`, via `pi-prompt-template-model`). `/audit`, `/audit-next`, and `/audit-prev` page through a path/glob in Hunk, batched — reviewing and discussing it from there is just the `hunk-review` skill above. `/deep-dive` is a standalone structured review prompt, independent of Hunk.
+Custom slash commands (`private_dot_pi/agent/prompts/`, via `pi-prompt-template-model`). `/audit`, `/audit-next`, and `/audit-prev` page through a path/glob in Hunk, batched — reviewing and discussing it from there is just the `hunk-review` skill that ships with the `hunk` formula itself (`hunk skill path`), not chezmoi-managed. `/deep-dive` is a standalone structured review prompt, independent of Hunk.
 
 | Command | What it does |
 |---------|---------------|
