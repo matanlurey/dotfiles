@@ -196,10 +196,8 @@ zellij d myproject               # Delete session
 |---------|--------------|
 | **pi-web-access** | Web search, fetch, and content extraction tools |
 | **pi-mcp-adapter** | MCP server integration — connects to configured MCP servers lazily |
-| **pi-fzfp** | Replaces built-in `@` file autocomplete with fzf-powered fuzzy matching |
 | **pi-nvim** | Unix socket bridge — lets Neovim send prompts to a running Pi session |
 | **pi-draw** | Drawing/diagramming tool by mitsuhiko |
-| **pi-autoresearch** | Autonomous experiment loop — run, measure, keep or discard |
 | **pi-interview** | Interactive interview forms — rich question types with native macOS window |
 | **pi-remote** | Remote terminal access via WebSocket and browser, with Tailscale integration |
 | **pi-subagents** | Spawn sub-agents for parallel task execution |
@@ -208,7 +206,6 @@ zellij d myproject               # Delete session
 | **pi-intercom** | Cross-session communication between pi agents |
 | **glimpseui** | Native WebView window for scripts and agents — used by pi-interview for macOS native dialogs |
 | **pi-agent-browser-native** | Native browser automation tool wrapping agent-browser for web debugging, perf, and QA |
-| **pi-boomerang** | Reconnect and resume pi sessions after restart/crash |
 | **pi-commandcode-provider** | Connects Pi to the Command Code API (Claude, GPT, DeepSeek V4, Kimi, GLM, Qwen 3.6, and more) |
 | **pi-cmux** | Terminal multiplexer integration for pi |
 | **pi-anthropic-auth** | Anthropic model provider with custom proxy/base URL support via `@gotgenes/pi-anthropic-auth` |
@@ -232,16 +229,13 @@ zellij d myproject               # Delete session
 
 | Extension | What it does |
 |-----------|--------------|
-| **guardrails.ts** | Hard-blocks bash commands that hang the session or violate policy: `find /`\|`~`\|`$HOME` (unbounded filesystem scans), `jj`/`git -i`/`--interactive` (opens an editor, hangs non-interactive sessions), and `jj squash` (never-squash policy) |
-| **review.ts** | `/review` for local self-review (jj diff), `/review <PR>` for GitHub PRs — Conventional Comments format |
-| **tts.ts** | `/speak` reads last response aloud via macOS `say`; `/speak auto` toggles auto-speak |
+| **local-model-lite.ts** | When the active model is served by the `ollama` provider, strips registered extension tools down to the built-ins (read, bash, edit, write, grep, find, ls) plus the `pi-mcp-adapter` gateway, so local models don't reprocess every tool schema on a cold cache. Switching back to a cloud model restores the full tool set |
 | **gh-agent/** | `/gh-agent` — autonomous GitHub issue worker. Watches a label, works issues in isolated worktrees, opens draft PRs, answers reviews with new commits, fixes red CI, stands down on merge or label removal. Runs as a detached daemon. See [its README](private_dot_pi/agent/extensions/gh-agent/README.md) |
 
 #### Pi Skills
 
 | Skill | What it does |
 |-------|---------------|
-| **grill-me** | Conducts a rigorous technical interview on the current codebase using pi-interview |
 | **api-doc-comments** | Writes and de-slops high-quality documentation comments for public APIs (agnostic principles + TS/Python/Rust/Go references) |
 | **simplify** | Reviews code for word choice, structure, and overfitting before it's ready for human review (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **done** | Wraps up a finished feature — commits, rebases, merges/PRs, and cleans up worktrees/workspaces (git and jj) (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
@@ -271,16 +265,11 @@ zellij d myproject               # Delete session
 
 #### Pi Prompt Templates
 
-Custom slash commands (`private_dot_pi/agent/prompts/`, via `pi-prompt-template-model`). `/audit`, `/audit-next`, and `/audit-prev` page through a path/glob in Hunk, batched — reviewing and discussing it from there is just the `hunk-review` skill that ships with the `hunk` formula itself (`hunk skill path`), not chezmoi-managed. `/deep-dive` is a standalone structured review prompt, independent of Hunk.
+Custom slash commands (`private_dot_pi/agent/prompts/`, via `pi-prompt-template-model`).
 
 | Command | What it does |
 |---------|---------------|
-| **/audit \<path-or-glob\>** | Enumerates non-ignored, non-generated, non-binary files under the target, splits them into batches, and opens batch 1 in your live Hunk session. Resumable — re-running the same target continues from wherever you left off; `--fresh` restarts it; `--batch-size N` overrides the default of 8 |
-| **/audit-next** | Opens the next batch in Hunk |
-| **/audit-prev** | Opens the previous batch in Hunk |
 | **/deep-dive \<path\> [focus]** | Reads every file under the path, then checks it against real callers/exports (dead public API), test coverage of edge/error/interaction paths, project conventions (README/lint/type-check/test), and asymmetries between sibling variants (e.g. sync vs. async). Reports findings as Conventional Comments grouped by file with a summary table; optional trailing args add extra focus for that pass |
-
-The bookkeeping (enumeration, batching, current position, resuming) lives in `private_dot_pi/agent/prompts/audit-scripts/audit.mjs` — a plain Node script, not a Pi extension, since none of this needs a persistent background process or a live status widget.
 
 ### Brewfile
 
