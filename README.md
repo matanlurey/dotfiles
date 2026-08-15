@@ -237,6 +237,7 @@ zellij d myproject               # Delete session
 | Skill | What it does |
 |-------|---------------|
 | **api-doc-comments** | Writes and de-slops high-quality documentation comments for public APIs (agnostic principles + TS/Python/Rust/Go references) |
+| **simplification-audit** | Read-only, coordinator-plus-workers audit of the whole codebase for materially useful simplifications in data structures, state representation, control flow, algorithms, and ownership — builds a subsystem coverage contract, runs bounded per-subsystem reviews, then audits its own coverage. Recommends, never edits (adapted from [Aaron Francis](https://gist.github.com/aarondfrancis/8735edbe48532f97ee5ea818db4dbd47)) |
 | **simplify** | Reviews code for word choice, structure, and overfitting before it's ready for human review (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **done** | Wraps up a finished feature — commits, rebases, merges/PRs, and cleans up worktrees/workspaces (git and jj) (adapted from [bholmesdev/skills](https://github.com/bholmesdev/skills)) |
 | **bro** | Restates the last message in plain human language, no jargon (adapted from [dmmulroy/.dotfiles](https://github.com/dmmulroy/.dotfiles)) |
