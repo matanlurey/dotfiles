@@ -211,6 +211,9 @@ zellij d myproject               # Delete session
 | **pi-anthropic-auth** | Anthropic model provider with custom proxy/base URL support via `@gotgenes/pi-anthropic-auth` |
 | **pi-tasks** | Claude Code-style task tracking and coordination — structured tasks, dependency management, persistent widget |
 | **pi-goal** | Session-scoped `/goal` mode — autonomous, verifiable task completion with guarded continuation turns |
+| **pi-context-view** | `/context` — visualizes context usage (tools, skills, messages) and inspects hidden injections: base prompt, tool defs, and extension-injected instructions |
+| **pi-fff** | Replaces the built-in `find`/`grep` with FFF-powered tools (`fffind`, `ffgrep`, `fff-multi-grep`) — Rust-native, SIMD-accelerated, frecency-ranked, git-aware fuzzy file and content search |
+| **ponytail** | Always-on anti-over-engineering ruleset by DietrichGebert — pushes the agent to write only what the task needs; adds `/ponytail` (lite/full/ultra/off), `/ponytail-review`, `/ponytail-audit`, `/ponytail-debt`, `/ponytail-gain` |
 
 #### Pi MCP Servers
 

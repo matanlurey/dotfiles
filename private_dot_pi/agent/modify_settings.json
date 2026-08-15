@@ -47,7 +47,10 @@ DESIRED='{
     "npm:@gotgenes/pi-anthropic-auth",
     "npm:pi-prompt-template-model",
     "https://github.com/tintinweb/pi-tasks",
-    "npm:@narumitw/pi-goal"
+    "npm:@narumitw/pi-goal",
+    "npm:pi-context-view",
+    "npm:@ff-labs/pi-fff",
+    "https://github.com/DietrichGebert/ponytail"
   ]
 }'
 
