@@ -91,9 +91,6 @@ vim.keymap.set("t", "<C-h>", "<C-\\><C-n><C-w>h")
 vim.keymap.set("t", "<C-j>", "<C-\\><C-n><C-w>j")
 vim.keymap.set("t", "<C-k>", "<C-\\><C-n><C-w>k")
 vim.keymap.set("t", "<C-l>", "<C-\\><C-n><C-w>l")
-
--- Terminal
-vim.keymap.set("n", "<leader>t", "<cmd>split | terminal<CR>i", { desc = "Terminal" })
 vim.keymap.set("t", "<Esc>", "<C-\\><C-n>", { desc = "Exit terminal mode" })
 
 -- Move lines in visual mode
@@ -459,6 +456,18 @@ require("lazy").setup({
       { "<leader>o", "<cmd>Outline<CR>", desc = "Toggle outline" },
     },
     opts = {},
+  },
+
+  -- Floating terminal toggle
+  {
+    "akinsho/toggleterm.nvim",
+    keys = {
+      { "<leader>t", "<cmd>ToggleTerm direction=float<CR>", mode = { "n", "t" }, desc = "Toggle terminal" },
+    },
+    opts = {
+      direction = "float",
+      float_opts = { border = "rounded" },
+    },
   },
 
   -- Machine-specific extras (loaded from lua/plugins/extras.lua if present)
