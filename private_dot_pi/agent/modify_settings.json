@@ -1,5 +1,5 @@
 #!/bin/bash
-# Vast work overlay: Anthropic models via proxy, overrides public dotfiles.
+# Vast work overlay: Anthropic models via Vertex, overrides public dotfiles.
 # stdin = current file contents (empty string on first run)
 
 set -euo pipefail
@@ -8,25 +8,22 @@ CURRENT="$(cat)"
 
 DESIRED='{
   "defaultProvider": "anthropic",
-  "defaultModel": "claude-sonnet-5",
+  "defaultModel": "vertex_ai/claude-sonnet-5",
   "hideThinkingBlock": false,
   "defaultThinkingLevel": "medium",
   "enabledModels": [
-    "commandcode/deepseek/deepseek-v4-flash",
-    "commandcode/deepseek/deepseek-v4-pro",
-    "anthropic/claude-haiku-4-5-20251001",
-    "anthropic/claude-sonnet-5",
-    "anthropic/claude-opus-4-8",
-    "anthropic/claude-opus-5"
+    "anthropic/vertex_ai/claude-sonnet-5",
+    "anthropic/claude-opus-5",
+    "anthropic/vertex_ai/claude-haiku-4-5@20251001"
   ],
   "subagents": {
     "agentOverrides": {
-      "scout": { "model": "anthropic/claude-haiku-4-5-20251001" },
-      "context-builder": { "model": "anthropic/claude-haiku-4-5-20251001" },
-      "researcher": { "model": "anthropic/claude-haiku-4-5-20251001" },
-      "delegate": { "model": "anthropic/claude-haiku-4-5-20251001" },
-      "planner": { "model": "anthropic/claude-sonnet-5", "thinking": "high" },
-      "worker": { "model": "anthropic/claude-sonnet-5", "thinking": "medium" },
+      "scout": { "model": "anthropic/vertex_ai/claude-haiku-4-5@20251001" },
+      "context-builder": { "model": "anthropic/vertex_ai/claude-haiku-4-5@20251001" },
+      "researcher": { "model": "anthropic/vertex_ai/claude-haiku-4-5@20251001" },
+      "delegate": { "model": "anthropic/vertex_ai/claude-haiku-4-5@20251001" },
+      "planner": { "model": "anthropic/vertex_ai/claude-sonnet-5", "thinking": "high" },
+      "worker": { "model": "anthropic/vertex_ai/claude-sonnet-5", "thinking": "medium" },
       "reviewer": { "model": "anthropic/claude-opus-5", "thinking": "high" },
       "oracle": { "model": "anthropic/claude-opus-5", "thinking": "high" }
     }
@@ -34,18 +31,18 @@ DESIRED='{
   "packages": [
     "npm:pi-web-access",
     "npm:pi-mcp-adapter",
+    "npm:@burneikis/pi-fzfp",
     "https://github.com/carderne/pi-nvim",
     "https://github.com/mitsuhiko/pi-draw",
+    "npm:pi-autoresearch",
     "npm:pi-interview",
     "npm:pi-subagents",
     "npm:pi-code-previews",
     "npm:pi-intercom",
     "npm:@noahsaso/pi-remote",
     "npm:pi-agent-browser-native",
-    "npm:pi-commandcode-provider",
+    "https://github.com/nicobailon/pi-boomerang",
     "https://github.com/devnazim/pi-cmux",
-    "npm:@gotgenes/pi-anthropic-auth",
-    "npm:pi-prompt-template-model",
     "https://github.com/tintinweb/pi-tasks",
     "npm:@narumitw/pi-goal",
     "npm:pi-context-view",
