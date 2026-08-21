@@ -4,8 +4,7 @@
 
 - If a repo has `.jj` (Jujutsu initialized), prefer `jj` over `git` for all write operations (commit, describe, push, bookmark, etc.).
 - Read operations (diff, log, status) can use either, but prefer `jj` for consistency.
-- Use `jj describe` instead of `git commit`, `jj new` instead of `git checkout -b`, `jj bookmark set` + `jj push` instead of `git push`, etc.
-- Use `jj git push` to push changes.
+- Use `jj describe` instead of `git commit`, `jj new` instead of `git checkout -b`, `jj bookmark set` + `jj git push` instead of `git push`, etc.
 - For sub-agents that need isolated working copies, use `jj workspace add /tmp/workspace-name` instead of `git worktree`. Clean up with `jj workspace forget` and `rm -rf` the tmp directory when done.
 
 ### Commit discipline
@@ -21,26 +20,55 @@ jj rewrites commit SHAs on any mutation (describe, squash, rebase), which means
 so force pushes destroy reviewer context: "viewed" markers reset, inline
 comments get orphaned, and the "Changes since last review" diff breaks.
 
-## Personal Notes
-
-The `.matan/` directory is gitignored globally and is the conventional place for personal notes, scratch files, and local context that should never be committed. Feel free to create or read `.matan/` in any repo for repo-specific notes.
-
-### Papercuts
-
-When you hit friction during real work, log it to `.matan/papercuts.md` in the repo root instead of silently pushing through. The point is to surface the small frustrations models normally work around without mentioning: dead-end tool calls, broken or 404 links, misleading/outdated docs, confusing APIs, shell gotchas, footguns, unexpected CWD/config behavior, anything that cost you time or a retry.
-
-Append with a shell command so the timestamp is real (create the file and `.matan/` if missing):
+**Before pushing, check if the branch has an open PR with reviews:**
 
 ```bash
-mkdir -p .matan && cat >> .matan/papercuts.md <<EOF
+# For github.com repos:
+gh pr list --head "$(jj bookmark list --all -T 'if(self.tracked(), name ++ "\n")' | head -1)" --json number,reviewDecision,reviews --jq '.[0]'
 
-## $(date -u +%Y-%m-%dT%H:%M:%S.000Z) - ${PI_MODEL:-unknown} - $(whoami)
-
-<one paragraph describing the papercut and any workaround>
-EOF
+# For code.vastspace.com repos:
+GH_HOST=code.vastspace.com gh pr list --head "$(jj bookmark list --all -T 'if(self.tracked(), name ++ "\n")' | head -1)" --json number,reviewDecision,reviews --jq '.[0]'
 ```
+
+**If the PR has reviews:**
+
+- **Add new commits on top** with `jj new -m "address review feedback"`. Do
+  not amend, squash into, or rebase already-pushed commits.
+- **Do not rebase onto main/trunk** unless there are conflicts or the user
+  explicitly asks. An unnecessary rebase rewrites every commit in the stack.
+- **Do not `jj describe`** on already-pushed commits (it rewrites their SHA).
+- **Warn the user** before any push that will force-push over reviewed commits.
+  Explain what reviewer context will be lost.
+
+**If the PR has no reviews yet**, normal jj workflow applies (amend, rebase,
+describe freely).
+
+### Multi-agent jj workflow
+
+Workspaces give each agent an isolated working copy while sharing the same repo. All changes are visible in `jj log` from any workspace.
+
+1. Note your current change: `jj log --limit 1`
+2. Per agent: `jj workspace add /tmp/agent-<task>`, then `jj new <parent> -m "task"`
+3. Agent works (all edits auto-tracked, no staging needed)
+4. When done, from your main workspace: `jj rebase -r <agent-change> -d <target>` to land the change as its own commit
+5. To combine multiple agents as a merge: `jj new <change-a> <change-b>`
+6. Clean up: `jj workspace forget <name> && rm -rf /tmp/agent-<task>`
+
+For sequential (non-parallel) agents, skip workspaces. Just `jj new -m "task"` before each agent runs.
+
+### Non-interactive jj usage
+
+Never use `-i`/`--interactive` flags or commands that open an editor/diff tool. These hang in agent sessions.
+
+- `jj describe -m "message"` sets the description without opening an editor.
+- `jj split [FILESETS...]` splits by paths, not interactively. Without paths it opens a diff editor, so always provide paths.
+- `jj new -m "message"` creates a new change without opening an editor.
+- `jj rebase -r <rev> -d <dest>` moves a commit without squashing it.
+- Always pass `-m` to any command that would otherwise open `$EDITOR`.
 
 ## GitHub CLI
 
-- Never use `gh` (or `GH_HOST=... gh`) to post, reply to, or leave comments on PRs or issues.
+- Never use `gh` (or `GH_HOST=... gh`) to post, reply to, or leave comments on PRs or issues unless explicitly asked.
+- This includes `gh pr comment`, `gh pr review`, `gh issue comment`, and similar write operations.
+- Read operations (`gh pr view`, `gh pr diff`, `gh issue list`, etc.) are always fine.
 
